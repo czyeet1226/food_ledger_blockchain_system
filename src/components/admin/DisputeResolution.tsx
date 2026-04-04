@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/Card";
 import { StatusBadge } from "@/components/ui/Badge";
 import { Modal } from "@/components/ui/Modal";
 import type { Dispute, DisputeStatus } from "@/types";
+import { User, Store } from "lucide-react";
 
 export function DisputeResolution() {
   const { disputes, updateDisputeStatus } = useStore();
@@ -22,12 +23,17 @@ export function DisputeResolution() {
   return (
     <>
       <Card>
-        <h3 className="font-semibold mb-4">Disputes ({disputes.length})</h3>
+        <h3 className="font-semibold text-gray-900 mb-4">
+          Disputes
+          <span className="ml-2 text-sm font-normal text-gray-400">
+            ({disputes.length})
+          </span>
+        </h3>
         <div className="space-y-3">
           {disputes.map((d) => (
             <div
               key={d.id}
-              className="border rounded-lg p-4 cursor-pointer hover:border-brand-300 transition-colors"
+              className="border border-gray-100 rounded-xl p-5 cursor-pointer hover:border-brand-200 hover:bg-brand-50/30 transition-all"
               onClick={() => setSelected(d)}
               role="button"
               tabIndex={0}
@@ -35,11 +41,19 @@ export function DisputeResolution() {
             >
               <div className="flex items-start justify-between">
                 <div>
-                  <h4 className="font-medium">{d.subject}</h4>
-                  <p className="text-sm text-gray-600 mt-1">{d.description}</p>
-                  <div className="flex gap-3 mt-2 text-xs text-gray-500">
-                    <span>Customer: {d.customerName}</span>
-                    <span>Merchant: {d.merchantName}</span>
+                  <h4 className="font-semibold text-gray-900">{d.subject}</h4>
+                  <p className="text-sm text-gray-500 mt-1 line-clamp-2">
+                    {d.description}
+                  </p>
+                  <div className="flex gap-4 mt-3 text-xs text-gray-400">
+                    <span className="flex items-center gap-1">
+                      <User size={12} />
+                      {d.customerName}
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Store size={12} />
+                      {d.merchantName}
+                    </span>
                     <span>Filed: {d.createdAt}</span>
                   </div>
                 </div>
@@ -58,23 +72,31 @@ export function DisputeResolution() {
         {selected && (
           <div className="space-y-4">
             <div>
-              <p className="text-sm font-medium">Subject</p>
-              <p className="text-sm text-gray-600">{selected.subject}</p>
+              <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Subject
+              </p>
+              <p className="text-sm text-gray-900 mt-1">{selected.subject}</p>
             </div>
             <div>
-              <p className="text-sm font-medium">Description</p>
-              <p className="text-sm text-gray-600">{selected.description}</p>
+              <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Description
+              </p>
+              <p className="text-sm text-gray-600 mt-1">
+                {selected.description}
+              </p>
             </div>
             <div>
-              <p className="text-sm font-medium">Transaction</p>
-              <code className="text-xs bg-gray-100 px-2 py-1 rounded">
+              <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Transaction
+              </p>
+              <code className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-md block mt-1 font-mono">
                 {selected.txHash}
               </code>
             </div>
             <div>
               <label
                 htmlFor="resolution"
-                className="text-sm font-medium block mb-1"
+                className="text-xs font-medium text-gray-500 uppercase tracking-wider block mb-1.5"
               >
                 Resolution Notes
               </label>
@@ -82,27 +104,27 @@ export function DisputeResolution() {
                 id="resolution"
                 value={resolution}
                 onChange={(e) => setResolution(e.target.value)}
-                className="w-full border rounded-lg p-2 text-sm"
+                className="w-full border border-gray-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-400 outline-none transition-all"
                 rows={3}
                 placeholder="Enter resolution details..."
               />
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-2 pt-2">
               <button
                 onClick={() => handleResolve("investigating")}
-                className="bg-blue-500 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-600"
+                className="bg-blue-500 text-white px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-blue-600 transition-colors"
               >
                 Investigate
               </button>
               <button
                 onClick={() => handleResolve("resolved")}
-                className="bg-green-500 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-600"
+                className="bg-emerald-500 text-white px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-emerald-600 transition-colors"
               >
                 Resolve
               </button>
               <button
                 onClick={() => handleResolve("dismissed")}
-                className="bg-gray-500 text-white px-4 py-2 rounded-lg text-sm hover:bg-gray-600"
+                className="bg-gray-100 text-gray-600 px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-gray-200 transition-colors"
               >
                 Dismiss
               </button>

@@ -1,6 +1,11 @@
 # dependencies
 node_modules/
 
+# hardhat
+backend/artifacts/
+backend/cache/
+backend/typechain-types/
+
 # next.js
 .next/
 out/

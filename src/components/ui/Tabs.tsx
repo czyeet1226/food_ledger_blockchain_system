@@ -5,6 +5,7 @@ import { useState } from "react";
 interface Tab {
   id: string;
   label: string;
+  icon?: React.ReactNode;
   content: React.ReactNode;
 }
 
@@ -13,24 +14,30 @@ export function Tabs({ tabs }: { tabs: Tab[] }) {
 
   return (
     <div>
-      <div className="flex gap-1 border-b border-gray-200 mb-6" role="tablist">
+      <div
+        className="flex gap-1 bg-gray-100/80 p-1 rounded-xl mb-6 overflow-x-auto"
+        role="tablist"
+      >
         {tabs.map((tab) => (
           <button
             key={tab.id}
             role="tab"
             aria-selected={active === tab.id}
             onClick={() => setActive(tab.id)}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 whitespace-nowrap ${
               active === tab.id
-                ? "border-brand-500 text-brand-600"
-                : "border-transparent text-gray-500 hover:text-gray-700"
+                ? "bg-white text-gray-900 shadow-sm"
+                : "text-gray-500 hover:text-gray-700 hover:bg-white/50"
             }`}
           >
+            {tab.icon}
             {tab.label}
           </button>
         ))}
       </div>
-      <div role="tabpanel">{tabs.find((t) => t.id === active)?.content}</div>
+      <div role="tabpanel" className="animate-fade-in">
+        {tabs.find((t) => t.id === active)?.content}
+      </div>
     </div>
   );
 }

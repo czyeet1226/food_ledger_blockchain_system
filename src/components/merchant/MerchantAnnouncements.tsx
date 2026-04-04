@@ -26,25 +26,33 @@ export function MerchantAnnouncements() {
     setForm({ title: "", content: "" });
   };
 
+  const inputClass =
+    "w-full border border-gray-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-400 outline-none transition-all";
+
   return (
     <>
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-xl font-semibold">Announcements</h3>
+      <div className="flex items-center justify-between mb-5">
+        <h3 className="text-lg font-semibold text-gray-900">Announcements</h3>
         <button
           onClick={() => setShowCreate(true)}
-          className="flex items-center gap-1 bg-brand-500 text-white px-4 py-2 rounded-lg text-sm hover:bg-brand-600"
+          className="flex items-center gap-1.5 bg-brand-500 text-white px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-brand-600 transition-colors shadow-sm"
         >
           <Plus size={16} /> New Announcement
         </button>
       </div>
       <div className="space-y-4">
         {myAnnouncements.map((a) => (
-          <Card key={a.id}>
-            <div className="flex items-start gap-3">
-              <Megaphone size={20} className="text-brand-500 mt-0.5" />
+          <Card
+            key={a.id}
+            className="hover:shadow-card-hover transition-shadow"
+          >
+            <div className="flex items-start gap-4">
+              <div className="w-10 h-10 rounded-xl bg-brand-50 flex items-center justify-center shrink-0">
+                <Megaphone size={18} className="text-brand-500" />
+              </div>
               <div>
-                <h4 className="font-semibold">{a.title}</h4>
-                <p className="text-sm text-gray-600 mt-1">{a.content}</p>
+                <h4 className="font-semibold text-gray-900">{a.title}</h4>
+                <p className="text-sm text-gray-500 mt-1">{a.content}</p>
                 <p className="text-xs text-gray-400 mt-2">{a.createdAt}</p>
               </div>
             </div>
@@ -57,24 +65,24 @@ export function MerchantAnnouncements() {
         onClose={() => setShowCreate(false)}
         title="New Announcement"
       >
-        <div className="space-y-3">
+        <div className="space-y-4">
           <input
             type="text"
             placeholder="Title"
             value={form.title}
             onChange={(e) => setForm({ ...form, title: e.target.value })}
-            className="w-full border rounded-lg p-2 text-sm"
+            className={inputClass}
           />
           <textarea
             placeholder="Content"
             value={form.content}
             onChange={(e) => setForm({ ...form, content: e.target.value })}
-            className="w-full border rounded-lg p-2 text-sm"
+            className={inputClass + " resize-none"}
             rows={4}
           />
           <button
             onClick={handleCreate}
-            className="w-full bg-brand-500 text-white py-2 rounded-lg text-sm hover:bg-brand-600"
+            className="w-full bg-brand-500 text-white py-2.5 rounded-xl text-sm font-medium hover:bg-brand-600 transition-colors shadow-sm"
           >
             Publish
           </button>

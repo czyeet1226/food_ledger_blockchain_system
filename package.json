@@ -6,7 +6,11 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "chain": "npm run node --prefix backend",
+    "compile": "npm run compile --prefix backend",
+    "test:sol": "npm test --prefix backend",
+    "deploy:local": "npm run deploy:local --prefix backend"
   },
   "dependencies": {
     "next": "^14.2.0",

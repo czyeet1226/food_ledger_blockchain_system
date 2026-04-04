@@ -9,40 +9,48 @@ export function PlatformOversight() {
 
   return (
     <Card>
-      <h3 className="font-semibold mb-4">Blockchain Transactions</h3>
+      <h3 className="font-semibold text-gray-900 mb-4">
+        Blockchain Transactions
+      </h3>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="text-left text-gray-500 border-b">
-              <th className="pb-2">Tx Hash</th>
-              <th className="pb-2">From</th>
-              <th className="pb-2">To</th>
-              <th className="pb-2">Amount</th>
-              <th className="pb-2">Plan</th>
-              <th className="pb-2">Status</th>
-              <th className="pb-2">Time</th>
+            <tr className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
+              <th className="pb-3 pr-4">Tx Hash</th>
+              <th className="pb-3 pr-4">From</th>
+              <th className="pb-3 pr-4">To</th>
+              <th className="pb-3 pr-4">Amount</th>
+              <th className="pb-3 pr-4">Plan</th>
+              <th className="pb-3 pr-4">Status</th>
+              <th className="pb-3">Time</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="divide-y divide-gray-50">
             {transactions.map((tx) => (
-              <tr key={tx.id} className="border-b last:border-0">
-                <td className="py-3">
-                  <code className="text-xs bg-gray-100 px-1 rounded">
-                    {tx.txHash}
+              <tr key={tx.id} className="hover:bg-gray-50/50 transition-colors">
+                <td className="py-3.5 pr-4">
+                  <code className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-md font-mono">
+                    {tx.txHash.slice(0, 10)}...
                   </code>
                 </td>
-                <td className="py-3">
-                  <code className="text-xs">{tx.from}</code>
+                <td className="py-3.5 pr-4">
+                  <code className="text-xs font-mono text-gray-500">
+                    {tx.from}
+                  </code>
                 </td>
-                <td className="py-3">
-                  <code className="text-xs">{tx.to}</code>
+                <td className="py-3.5 pr-4">
+                  <code className="text-xs font-mono text-gray-500">
+                    {tx.to}
+                  </code>
                 </td>
-                <td className="py-3 font-medium">{tx.amount} ETH</td>
-                <td className="py-3">{tx.planTitle}</td>
-                <td className="py-3">
+                <td className="py-3.5 pr-4 font-semibold text-gray-900">
+                  {tx.amount} ETH
+                </td>
+                <td className="py-3.5 pr-4 text-gray-600">{tx.planTitle}</td>
+                <td className="py-3.5 pr-4">
                   <StatusBadge status={tx.status} />
                 </td>
-                <td className="py-3 text-gray-500 text-xs">
+                <td className="py-3.5 text-gray-400 text-xs">
                   {new Date(tx.timestamp).toLocaleString()}
                 </td>
               </tr>
