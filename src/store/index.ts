@@ -28,9 +28,12 @@ interface AppState {
   // Auth
   currentUser: User | null;
   isWalletConnected: boolean;
+  walletAddress: string | null;
+  connectWallet: () => Promise<string | null>;
+  disconnectWallet: () => void;
+  loginWithRole: (role: UserRole, walletAddress: string) => void;
   login: (role: UserRole) => void;
   logout: () => void;
-  connectWallet: () => void;
 
   // Merchants
   merchants: Merchant[];
@@ -74,59 +77,113 @@ interface AppState {
   ) => void;
 }
 
-const adminUser: User = {
-  id: "admin-1",
-  walletAddress: "0xADMIN...1234",
-  role: "admin",
-  name: "Platform Admin",
-  email: "admin@foodledger.io",
-  createdAt: "2025-01-01",
-  isActive: true,
-};
-
-const merchantUser: Merchant = {
-  id: "merchant-1",
-  walletAddress: "0xMERCH...5678",
-  role: "merchant",
-  name: "John's Kitchen",
-  businessName: "John's Kitchen",
-  description: "Farm-to-table dining experience",
-  cuisine: "American",
-  location: "123 Main St, New York",
-  logo: "",
-  email: "john@kitchen.com",
-  phone: "+1-555-0100",
-  status: "approved",
-  createdAt: "2025-02-01",
-  isActive: true,
-};
-
-const customerUser: Customer = {
-  id: "customer-1",
-  walletAddress: "0xCUST...9012",
-  role: "customer",
-  name: "Alice Smith",
-  email: "alice@email.com",
-  createdAt: "2025-03-01",
-  isActive: true,
-  ownedMemberships: ["om-1", "om-2"],
-};
-
 export const useStore = create<AppState>((set, get) => ({
   // Auth
   currentUser: null,
   isWalletConnected: false,
-  login: (role) => {
-    const user =
-      role === "admin"
-        ? adminUser
-        : role === "merchant"
-          ? merchantUser
-          : customerUser;
-    set({ currentUser: user, isWalletConnected: true });
+  walletAddress: null,
+
+  connectWallet: async () => {
+    if (typeof window === "undefined") return null;
+
+    // Wait a bit for MetaMask to inject window.ethereum
+    let ethereum = (
+      window as unknown as {
+        ethereum?: { request: (args: { method: string }) => Promise<string[]> };
+      }
+    ).ethereum;
+    if (!ethereum) {
+      // MetaMask may not have injected yet, wait and retry
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      ethereum = (
+        window as unknown as {
+          ethereum?: {
+            request: (args: { method: string }) => Promise<string[]>;
+          };
+        }
+      ).ethereum;
+    }
+
+    if (!ethereum) {
+      alert(
+        "MetaMask is not detected. Please make sure the MetaMask extension is installed and enabled, then refresh the page.",
+      );
+      return null;
+    }
+
+    try {
+      const accounts = await ethereum.request({
+        method: "eth_requestAccounts",
+      });
+      const address = accounts[0];
+      set({ isWalletConnected: true, walletAddress: address });
+      return address;
+    } catch {
+      console.error("User rejected wallet connection");
+      return null;
+    }
   },
-  logout: () => set({ currentUser: null, isWalletConnected: false }),
-  connectWallet: () => set({ isWalletConnected: true }),
+
+  disconnectWallet: () => {
+    set({ isWalletConnected: false, walletAddress: null, currentUser: null });
+  },
+
+  loginWithRole: (role, walletAddress) => {
+    const shortAddr = `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`;
+    if (role === "admin") {
+      set({
+        currentUser: {
+          id: "admin-1",
+          walletAddress,
+          role: "admin",
+          name: "Platform Admin",
+          email: "admin@foodledger.io",
+          createdAt: new Date().toISOString(),
+          isActive: true,
+        },
+      });
+    } else if (role === "merchant") {
+      const merchant: Merchant = {
+        id: "merchant-1",
+        walletAddress,
+        role: "merchant",
+        name: `Merchant ${shortAddr}`,
+        businessName: "My Restaurant",
+        description: "Farm-to-table dining experience",
+        cuisine: "International",
+        location: "123 Main St",
+        logo: "",
+        email: "merchant@foodledger.io",
+        phone: "+1-555-0100",
+        status: "approved",
+        createdAt: new Date().toISOString(),
+        isActive: true,
+      };
+      set({ currentUser: merchant });
+    } else {
+      const customer: Customer = {
+        id: "customer-1",
+        walletAddress,
+        role: "customer",
+        name: `User ${shortAddr}`,
+        email: "customer@foodledger.io",
+        createdAt: new Date().toISOString(),
+        isActive: true,
+        ownedMemberships: [],
+      };
+      set({ currentUser: customer });
+    }
+  },
+
+  login: (role) => {
+    const state = get();
+    if (state.walletAddress) {
+      state.loginWithRole(role, state.walletAddress);
+    }
+  },
+
+  logout: () =>
+    set({ currentUser: null, isWalletConnected: false, walletAddress: null }),
 
   // Merchants
   merchants: mockMerchants,
