@@ -12,7 +12,7 @@ import type {
 export const mockMerchants: Merchant[] = [
   {
     id: "merchant-1",
-    walletAddress: "0xMERCH...5678",
+    walletAddress: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
     role: "merchant",
     name: "John's Kitchen",
     businessName: "John's Kitchen",
@@ -28,7 +28,7 @@ export const mockMerchants: Merchant[] = [
   },
   {
     id: "merchant-2",
-    walletAddress: "0xMERCH...ABCD",
+    walletAddress: "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
     role: "merchant",
     name: "Sakura Sushi",
     businessName: "Sakura Sushi",
@@ -44,7 +44,7 @@ export const mockMerchants: Merchant[] = [
   },
   {
     id: "merchant-3",
-    walletAddress: "0xMERCH...EFGH",
+    walletAddress: "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC",
     role: "merchant",
     name: "Bella Italia",
     businessName: "Bella Italia",
@@ -54,13 +54,13 @@ export const mockMerchants: Merchant[] = [
     logo: "",
     email: "ciao@bellaitalia.com",
     phone: "+1-555-0300",
-    status: "pending",
+    status: "approved",
     createdAt: "2025-03-10",
-    isActive: false,
+    isActive: true,
   },
   {
     id: "merchant-4",
-    walletAddress: "0xMERCH...IJKL",
+    walletAddress: "0x4444444444444444444444444444444444444444",
     role: "merchant",
     name: "Taco Fiesta",
     businessName: "Taco Fiesta",
@@ -79,7 +79,7 @@ export const mockMerchants: Merchant[] = [
 export const mockCustomers: Customer[] = [
   {
     id: "customer-1",
-    walletAddress: "0xCUST...9012",
+    walletAddress: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     role: "customer",
     name: "Alice Smith",
     email: "alice@email.com",
@@ -89,7 +89,7 @@ export const mockCustomers: Customer[] = [
   },
   {
     id: "customer-2",
-    walletAddress: "0xCUST...3456",
+    walletAddress: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
     role: "customer",
     name: "Bob Johnson",
     email: "bob@email.com",
@@ -99,7 +99,7 @@ export const mockCustomers: Customer[] = [
   },
   {
     id: "customer-3",
-    walletAddress: "0xCUST...7890",
+    walletAddress: "0xcccccccccccccccccccccccccccccccccccccccc",
     role: "customer",
     name: "Carol Williams",
     email: "carol@email.com",

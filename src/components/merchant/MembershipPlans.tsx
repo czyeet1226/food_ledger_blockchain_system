@@ -20,9 +20,9 @@ export function MembershipPlans() {
     maxSupply: "",
   });
 
-  const handleCreate = () => {
+  const handleCreate = async () => {
     if (!currentUser) return;
-    createPlan({
+    await createPlan({
       merchantId: currentUser.id,
       merchantName: currentUser.name,
       title: form.title,

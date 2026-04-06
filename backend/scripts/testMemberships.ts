@@ -11,7 +11,7 @@ async function main() {
   const contractAddress = await contract.getAddress();
   console.log(`✅ Contract deployed to: ${contractAddress}\n`);
 
-  // Create test memberships automatically
+  // Create memberships from different merchants
   console.log("📝 Creating test membership offerings...\n");
 
   // Merchant 1: John's Kitchen
@@ -71,16 +71,53 @@ async function main() {
   console.log("  ✓ Created 'Pasta Lover' plan (0.04 ETH, 180 days, max 75)\n");
 
   // Fetch all memberships
-  console.log("📊 Verifying memberships...\n");
+  console.log("📊 Fetching all membership offerings...\n");
   const allOfferings = await contract.getAllMembershipOfferings();
-  console.log(`✅ Total memberships available: ${allOfferings.length}\n`);
+  
+  console.log(`Total memberships created: ${allOfferings.length}\n`);
 
+  allOfferings.forEach((offering: any, index: number) => {
+    console.log(`[${index + 1}] ${offering.title}`);
+    console.log(`    Vendor: ${offering.vendor}`);
+    console.log(`    Price: ${ethers.formatEther(offering.price)} ETH`);
+    console.log(`    Duration: ${offering.duration} days`);
+    console.log(`    Max Supply: ${offering.maxSupply}`);
+    console.log(`    Active: ${offering.isActive}`);
+    console.log(`    Sold: ${offering.sold}`);
+    console.log(`    Benefits: ${offering.benefits}\n`);
+  });
+
+  // Test a purchase
+  console.log("💳 Testing a membership purchase...");
+  const goldMemberOffering = allOfferings[0];
+  tx = await contract.connect(customer).buyMembership(
+    goldMemberOffering.vendor,
+    goldMemberOffering.title,
+    goldMemberOffering.benefits,
+    goldMemberOffering.duration,
+    goldMemberOffering.price,
+    { value: goldMemberOffering.price }
+  );
+  await tx.wait();
+  console.log(`✓ Customer purchased '${goldMemberOffering.title}' from merchant ${goldMemberOffering.vendor.slice(0, 6)}...\n`);
+
+  // Fetch offerings again to see updated sold count
+  console.log("📊 Updated membership offerings (note 'sold' count):\n");
+  const updatedOfferings = await contract.getAllMembershipOfferings();
+  updatedOfferings.forEach((offering: any, index: number) => {
+    console.log(`[${index + 1}] ${offering.title} - Sold: ${offering.sold}/${offering.maxSupply}`);
+  });
+
+  console.log("\n" + "=".repeat(60));
+  console.log("🎉 Test setup complete!");
   console.log("=".repeat(60));
-  console.log("🎉 Deployment & setup complete!");
-  console.log("=".repeat(60));
-  console.log(`\n📝 Update your .env.local with:`);
+  console.log(`\nContract Address: ${contractAddress}`);
+  console.log(`Merchant 1: ${merchant1.address}`);
+  console.log(`Merchant 2: ${merchant2.address}`);
+  console.log(`Merchant 3: ${merchant3.address}`);
+  console.log(`Customer: ${customer.address}`);
+  console.log("\n📝 Update your .env file with:");
   console.log(`NEXT_PUBLIC_RESTAURANT_MEMBERSHIP_CONTRACT_ADDRESS=${contractAddress}`);
-  console.log("\n✅ Memberships are ready to view in the customer dashboard!\n");
 }
 
 main().catch((error) => {

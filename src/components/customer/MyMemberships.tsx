@@ -4,29 +4,50 @@ import { useStore } from "@/store";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { QRCodeSVG } from "qrcode.react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Modal } from "@/components/ui/Modal";
 import type { OwnedMembership } from "@/types";
 import { QrCode, Shield, CreditCard } from "lucide-react";
 
 export function MyMemberships() {
-  const { ownedMemberships, currentUser } = useStore();
-  const mine = ownedMemberships.filter((m) => m.customerId === currentUser?.id);
+  const { ownedMemberships, currentUser, loadOwnedMembershipsFromBlockchain } = useStore();
+  const [isLoading, setIsLoading] = useState(false);
   const [qrMembership, setQrMembership] = useState<OwnedMembership | null>(
     null,
   );
   const [proofMembership, setProofMembership] =
     useState<OwnedMembership | null>(null);
 
+  useEffect(() => {
+    const loadMemberships = async () => {
+      setIsLoading(true);
+      try {
+        await loadOwnedMembershipsFromBlockchain();
+      } catch (error) {
+        console.error("Failed to load memberships:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    if (currentUser?.role === "customer") {
+      loadMemberships();
+    }
+  }, [currentUser?.id, loadOwnedMembershipsFromBlockchain]);
+
   return (
     <>
       <h3 className="text-lg font-semibold text-gray-900 mb-4">
         My Memberships
         <span className="ml-2 text-sm font-normal text-gray-400">
-          ({mine.length})
+          ({ownedMemberships.length})
         </span>
       </h3>
-      {mine.length === 0 ? (
+      {isLoading ? (
+        <div className="text-center py-12">
+          <p className="text-gray-500">Loading memberships...</p>
+        </div>
+      ) : ownedMemberships.length === 0 ? (
         <div className="text-center py-12">
           <div className="w-14 h-14 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
             <CreditCard size={24} className="text-gray-400" />
@@ -38,7 +59,7 @@ export function MyMemberships() {
         </div>
       ) : (
         <div className="grid md:grid-cols-2 gap-4">
-          {mine.map((m) => {
+          {ownedMemberships.map((m) => {
             const isExpired = new Date(m.expiryDate) < new Date();
             return (
               <Card

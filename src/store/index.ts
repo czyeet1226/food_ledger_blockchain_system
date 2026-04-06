@@ -14,21 +14,19 @@ import type {
   DisputeStatus,
 } from "@/types";
 import {
-  mockMerchants,
-  mockPlans,
-  mockTransactions,
-  mockDisputes,
-  mockAds,
-  mockAnnouncements,
-  mockCustomers,
-  mockOwnedMemberships,
-} from "./mockData";
+  purchaseMembershipOnChain,
+  createMembershipOnChain,
+  fetchMembershipsFromBlockchain,
+  fetchOwnedMembershipsFromBlockchain,
+} from "@/lib/blockchain";
 
 interface AppState {
   // Auth
   currentUser: User | null;
   isWalletConnected: boolean;
   walletAddress: string | null;
+  accountChangeListener: ((accounts: string[]) => void) | null;
+  chainChangeListener: ((chainId: string) => void) | null;
   connectWallet: () => Promise<string | null>;
   disconnectWallet: () => void;
   loginWithRole: (role: UserRole, walletAddress: string) => void;
@@ -49,12 +47,14 @@ interface AppState {
 
   // Plans
   plans: MembershipPlan[];
-  createPlan: (plan: Omit<MembershipPlan, "id" | "sold" | "createdAt">) => void;
+  createPlan: (plan: Omit<MembershipPlan, "id" | "sold" | "createdAt">) => Promise<void>;
   togglePlan: (id: string) => void;
+  loadPlansFromBlockchain: () => Promise<void>;
 
   // Owned Memberships
   ownedMemberships: OwnedMembership[];
-  purchaseMembership: (planId: string) => void;
+  purchaseMembership: (planId: string) => Promise<void>;
+  loadOwnedMembershipsFromBlockchain: () => Promise<void>;
 
   // Ads
   ads: Ad[];
@@ -82,6 +82,8 @@ export const useStore = create<AppState>((set, get) => ({
   currentUser: null,
   isWalletConnected: false,
   walletAddress: null,
+  accountChangeListener: null,
+  chainChangeListener: null,
 
   connectWallet: async () => {
     if (typeof window === "undefined") return null;
@@ -89,7 +91,11 @@ export const useStore = create<AppState>((set, get) => ({
     // Wait a bit for MetaMask to inject window.ethereum
     let ethereum = (
       window as unknown as {
-        ethereum?: { request: (args: { method: string }) => Promise<string[]> };
+        ethereum?: {
+          request: (args: { method: string }) => Promise<string[]>,
+          on: (event: string, handler: (...args: any[]) => void) => void,
+          removeListener: (event: string, handler: (...args: any[]) => void) => void,
+        };
       }
     ).ethereum;
     if (!ethereum) {
@@ -98,7 +104,9 @@ export const useStore = create<AppState>((set, get) => ({
       ethereum = (
         window as unknown as {
           ethereum?: {
-            request: (args: { method: string }) => Promise<string[]>;
+            request: (args: { method: string }) => Promise<string[]>,
+            on: (event: string, handler: (...args: any[]) => void) => void,
+            removeListener: (event: string, handler: (...args: any[]) => void) => void,
           };
         }
       ).ethereum;
@@ -117,6 +125,48 @@ export const useStore = create<AppState>((set, get) => ({
       });
       const address = accounts[0];
       set({ isWalletConnected: true, walletAddress: address });
+
+      // Remove existing listeners if any
+      const currentAccountListener = get().accountChangeListener;
+      const currentChainListener = get().chainChangeListener;
+      if (currentAccountListener) {
+        ethereum.removeListener('accountsChanged', currentAccountListener);
+      }
+      if (currentChainListener) {
+        ethereum.removeListener('chainChanged', currentChainListener);
+      }
+
+      // Listen for account changes
+      const handleAccountsChanged = (accounts: string[]) => {
+        if (accounts.length === 0) {
+          // User disconnected their wallet
+          get().disconnectWallet();
+        } else if (accounts[0] !== get().walletAddress) {
+          // User switched accounts
+          const newAddress = accounts[0];
+          set({ walletAddress: newAddress });
+
+          // If there's a current user, log them out since they're on a different account
+          const currentUser = get().currentUser;
+          if (currentUser) {
+            alert(`Account switched to ${newAddress.slice(0, 6)}...${newAddress.slice(-4)}. You have been logged out for security.`);
+            get().logout();
+          }
+        }
+      };
+
+      // Listen for network changes
+      const handleChainChanged = (chainId: string) => {
+        // When network changes, reload the page to ensure contract addresses are correct
+        alert(`Network changed to chain ID: ${chainId}. Reloading page...`);
+        window.location.reload();
+      };
+
+      ethereum.on('accountsChanged', handleAccountsChanged);
+      ethereum.on('chainChanged', handleChainChanged);
+
+      set({ accountChangeListener: handleAccountsChanged, chainChangeListener: handleChainChanged });
+
       return address;
     } catch {
       console.error("User rejected wallet connection");
@@ -125,7 +175,23 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   disconnectWallet: () => {
-    set({ isWalletConnected: false, walletAddress: null, currentUser: null });
+    const state = get();
+    const ethereum = (
+      window as unknown as {
+        ethereum?: {
+          request: (args: { method: string }) => Promise<string[]>,
+          on: (event: string, handler: (...args: any[]) => void) => void,
+          removeListener: (event: string, handler: (...args: any[]) => void) => void,
+        };
+      }
+    ).ethereum;
+    if (state.accountChangeListener && ethereum) {
+      ethereum.removeListener('accountsChanged', state.accountChangeListener);
+    }
+    if (state.chainChangeListener && ethereum) {
+      ethereum.removeListener('chainChanged', state.chainChangeListener);
+    }
+    set({ isWalletConnected: false, walletAddress: null, currentUser: null, accountChangeListener: null, chainChangeListener: null });
   },
 
   loginWithRole: (role, walletAddress) => {
@@ -182,11 +248,12 @@ export const useStore = create<AppState>((set, get) => ({
     }
   },
 
-  logout: () =>
-    set({ currentUser: null, isWalletConnected: false, walletAddress: null }),
+  logout: () => {
+    get().disconnectWallet();
+  },
 
   // Merchants
-  merchants: mockMerchants,
+  merchants: [],
   approveMerchant: (id) =>
     set((s) => ({
       merchants: s.merchants.map((m) =>
@@ -219,11 +286,27 @@ export const useStore = create<AppState>((set, get) => ({
     })),
 
   // Customers
-  customers: mockCustomers,
+  customers: [],
 
   // Plans
-  plans: mockPlans,
-  createPlan: (plan) =>
+  plans: [],
+  createPlan: async (plan) => {
+    const state = get();
+
+    if (state.currentUser?.role === "merchant") {
+      try {
+        await createMembershipOnChain(
+          plan.title,
+          plan.benefits.join(", "),
+          plan.price,
+          plan.duration,
+          plan.maxSupply
+        );
+      } catch (error) {
+        console.error("Failed to create membership on-chain", error);
+      }
+    }
+
     set((s) => ({
       plans: [
         ...s.plans,
@@ -234,7 +317,8 @@ export const useStore = create<AppState>((set, get) => ({
           createdAt: new Date().toISOString(),
         },
       ],
-    })),
+    }));
+  },
   togglePlan: (id) =>
     set((s) => ({
       plans: s.plans.map((p) =>
@@ -242,49 +326,91 @@ export const useStore = create<AppState>((set, get) => ({
       ),
     })),
 
+  loadPlansFromBlockchain: async () => {
+    try {
+      const blockchainPlans = await fetchMembershipsFromBlockchain();
+      set({ plans: blockchainPlans });
+    } catch (error) {
+      console.error("Failed to load plans from blockchain:", error);
+      // No fallback - plans will be empty if blockchain fetch fails
+      set({ plans: [] });
+    }
+  },
+
   // Owned Memberships
-  ownedMemberships: mockOwnedMemberships,
-  purchaseMembership: (planId) => {
+  ownedMemberships: [],
+  purchaseMembership: async (planId) => {
     const state = get();
     const plan = state.plans.find((p) => p.id === planId);
-    if (!plan || !state.currentUser) return;
-    const now = new Date();
-    const expiry = new Date(now.getTime() + plan.duration * 86400000);
-    const om: OwnedMembership = {
-      id: `om-${Date.now()}`,
-      planId,
-      customerId: state.currentUser.id,
-      merchantId: plan.merchantId,
-      merchantName: plan.merchantName,
-      planTitle: plan.title,
-      purchaseDate: now.toISOString(),
-      expiryDate: expiry.toISOString(),
-      txHash: `0x${Math.random().toString(16).slice(2, 66)}`,
-      tokenId: `${Date.now()}`,
-      isValid: true,
-    };
-    const tx: Transaction = {
-      id: `tx-${Date.now()}`,
-      from: state.currentUser.walletAddress,
-      to: plan.merchantId,
-      amount: plan.price,
-      txHash: om.txHash,
-      planId,
-      planTitle: plan.title,
-      timestamp: now.toISOString(),
-      status: "confirmed",
-    };
-    set((s) => ({
-      ownedMemberships: [...s.ownedMemberships, om],
-      transactions: [...s.transactions, tx],
-      plans: s.plans.map((p) =>
-        p.id === planId ? { ...p, sold: p.sold + 1 } : p,
-      ),
-    }));
+    if (!plan || !state.currentUser || state.currentUser.role !== "customer") return;
+
+    // merchantId is the vendor wallet address from blockchain
+    const merchantWalletAddress = plan.merchantId;
+
+    try {
+      const receipt = await purchaseMembershipOnChain(plan, merchantWalletAddress);
+      const now = new Date();
+      const om: OwnedMembership = {
+        id: `om-${Date.now()}`,
+        planId,
+        customerId: state.currentUser.id,
+        merchantId: plan.merchantId,
+        merchantName: plan.merchantName,
+        planTitle: plan.title,
+        purchaseDate: now.toISOString(),
+        expiryDate: receipt.expiryDate,
+        txHash: receipt.txHash,
+        tokenId: receipt.tokenId,
+        isValid: true,
+      };
+      const tx: Transaction = {
+        id: `tx-${Date.now()}`,
+        from: state.currentUser.walletAddress,
+        to: merchantWalletAddress,
+        amount: plan.price,
+        txHash: receipt.txHash,
+        planId,
+        planTitle: plan.title,
+        timestamp: now.toISOString(),
+        status: "confirmed",
+      };
+
+      set((s) => ({
+        ownedMemberships: [...s.ownedMemberships, om],
+        transactions: [...s.transactions, tx],
+        plans: s.plans.map((p) =>
+          p.id === planId ? { ...p, sold: p.sold + 1 } : p,
+        ),
+      }));
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : String(error || "Unknown error");
+      console.error("Blockchain purchase failed:", error);
+      alert(
+        `Unable to complete purchase on the blockchain: ${message}. Check your wallet, network, and contract address.`,
+      );
+    }
+  },
+
+  loadOwnedMembershipsFromBlockchain: async () => {
+    const state = get();
+    if (!state.currentUser || !state.currentUser.walletAddress) {
+      console.log("No current user or wallet address");
+      return;
+    }
+
+    try {
+      const blockchainMemberships = await fetchOwnedMembershipsFromBlockchain(
+        state.currentUser.walletAddress,
+      );
+      set({ ownedMemberships: blockchainMemberships });
+    } catch (error) {
+      console.error("Failed to load owned memberships from blockchain:", error);
+    }
   },
 
   // Ads
-  ads: mockAds,
+  ads: [],
   createAd: (ad) =>
     set((s) => ({
       ads: [
@@ -300,7 +426,7 @@ export const useStore = create<AppState>((set, get) => ({
     })),
 
   // Announcements
-  announcements: mockAnnouncements,
+  announcements: [],
   createAnnouncement: (a) =>
     set((s) => ({
       announcements: [
@@ -310,10 +436,10 @@ export const useStore = create<AppState>((set, get) => ({
     })),
 
   // Transactions
-  transactions: mockTransactions,
+  transactions: [],
 
   // Disputes
-  disputes: mockDisputes,
+  disputes: [],
   updateDisputeStatus: (id, status, resolution) =>
     set((s) => ({
       disputes: s.disputes.map((d) =>

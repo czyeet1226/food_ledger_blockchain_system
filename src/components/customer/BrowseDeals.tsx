@@ -1,13 +1,20 @@
 "use client";
 
+import { useEffect } from "react";
 import { useStore } from "@/store";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { ShoppingCart, Sparkles } from "lucide-react";
 
 export function BrowseDeals() {
-  const { plans, ads, purchaseMembership, ownedMemberships, currentUser } =
+  const { plans, ads, purchaseMembership, ownedMemberships, currentUser, loadPlansFromBlockchain } =
     useStore();
+
+  // Load plans from blockchain on component mount
+  useEffect(() => {
+    loadPlansFromBlockchain();
+  }, [loadPlansFromBlockchain]);
+
   const activePlans = plans.filter((p) => p.isActive && p.sold < p.maxSupply);
   const owned = new Set(
     ownedMemberships
