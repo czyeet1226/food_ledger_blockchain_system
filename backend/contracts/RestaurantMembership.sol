@@ -55,7 +55,7 @@ contract RestaurantMembership is ERC721 {
         emit MembershipPicUpdated(tokenId, uri);
     }
 
-    function _exists(uint256 tokenId) internal view returns (bool) {
+    function _exists(uint256 tokenId) internal view override returns (bool) {
         return _ownerOf(tokenId) != address(0);
     }
 

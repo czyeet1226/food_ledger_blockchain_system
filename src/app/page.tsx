@@ -1,28 +1,53 @@
 "use client";
 
 import { useStore } from "@/store";
-import type { UserRole } from "@/types";
+import { Role } from "@/contracts/FoodLedger";
 import { AdminDashboard } from "@/components/admin/AdminDashboard";
 import { MerchantDashboard } from "@/components/merchant/MerchantDashboard";
 import { CustomerDashboard } from "@/components/customer/CustomerDashboard";
 import {
-  ShieldCheck,
   Store,
   User,
   LogOut,
   Wallet,
   ChevronDown,
+  Loader2,
 } from "lucide-react";
 import { useState } from "react";
 
 export default function Home() {
-  const { currentUser, logout } = useStore();
+  const {
+    currentUser,
+    logout,
+    isWalletConnected,
+    walletAddress,
+    onChainRole,
+    isLoading,
+    connectWallet,
+    registerOnChain,
+  } = useStore();
   const [showUserMenu, setShowUserMenu] = useState(false);
 
-  if (!currentUser) {
-    return <LoginScreen />;
+  // Step 1: Not connected → show Connect Wallet
+  if (!isWalletConnected) {
+    return <ConnectScreen />;
   }
 
+  // Step 2: Connected but no role → show Registration
+  if (onChainRole === Role.None && !currentUser) {
+    return <RegisterScreen />;
+  }
+
+  // Step 3: Loading
+  if (isLoading || !currentUser) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <Loader2 size={32} className="animate-spin text-brand-500" />
+      </div>
+    );
+  }
+
+  // Step 4: Logged in → show dashboard
   const handleLogout = () => {
     setShowUserMenu(false);
     logout();
@@ -84,9 +109,6 @@ export default function Home() {
                       <p className="text-sm font-semibold text-gray-900">
                         {currentUser.name}
                       </p>
-                      <p className="text-xs text-gray-500 mt-0.5">
-                        {currentUser.email}
-                      </p>
                       <div className="flex items-center gap-1.5 mt-2">
                         <Wallet size={12} className="text-gray-400" />
                         <code className="text-xs text-gray-500 font-mono">
@@ -119,9 +141,8 @@ export default function Home() {
   );
 }
 
-function LoginScreen() {
-  const { isWalletConnected, walletAddress, connectWallet, loginWithRole } =
-    useStore();
+function ConnectScreen() {
+  const { connectWallet, isLoading } = useStore();
   const [connecting, setConnecting] = useState(false);
 
   const handleConnect = async () => {
@@ -130,47 +151,12 @@ function LoginScreen() {
     setConnecting(false);
   };
 
-  const roles: {
-    role: UserRole;
-    label: string;
-    desc: string;
-    icon: React.ReactNode;
-    gradient: string;
-    iconBg: string;
-  }[] = [
-    {
-      role: "admin",
-      label: "Admin",
-      desc: "Platform governance & oversight",
-      icon: <ShieldCheck size={28} />,
-      gradient: "from-purple-500 to-purple-600",
-      iconBg: "bg-purple-100 text-purple-600",
-    },
-    {
-      role: "merchant",
-      label: "Merchant",
-      desc: "Create & sell memberships",
-      icon: <Store size={28} />,
-      gradient: "from-amber-500 to-orange-500",
-      iconBg: "bg-amber-100 text-amber-600",
-    },
-    {
-      role: "customer",
-      label: "Customer",
-      desc: "Browse & purchase memberships",
-      icon: <User size={28} />,
-      gradient: "from-blue-500 to-cyan-500",
-      iconBg: "bg-blue-100 text-blue-600",
-    },
-  ];
-
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 via-brand-50/30 to-gray-100 relative overflow-hidden">
       <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
         <div className="absolute -top-40 -right-40 w-80 h-80 bg-brand-200/30 rounded-full blur-3xl" />
         <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-brand-300/20 rounded-full blur-3xl" />
       </div>
-
       <div className="text-center relative z-10 px-4 animate-slide-up">
         <div className="flex items-center justify-center gap-3 mb-3">
           <div className="w-14 h-14 bg-gradient-to-br from-brand-400 to-brand-600 rounded-2xl flex items-center justify-center shadow-lg shadow-brand-500/25">
@@ -183,65 +169,163 @@ function LoginScreen() {
         <p className="text-gray-500 mt-2 mb-10 text-lg">
           Blockchain-powered restaurant memberships
         </p>
+        <button
+          onClick={handleConnect}
+          disabled={connecting || isLoading}
+          className="inline-flex items-center gap-3 bg-gradient-to-r from-brand-500 to-brand-600 text-white px-8 py-4 rounded-2xl text-lg font-semibold hover:from-brand-600 hover:to-brand-700 transition-all shadow-lg shadow-brand-500/25 disabled:opacity-60"
+        >
+          {connecting || isLoading ? (
+            <Loader2 size={24} className="animate-spin" />
+          ) : (
+            <Wallet size={24} />
+          )}
+          {connecting || isLoading ? "Connecting..." : "Connect Wallet"}
+        </button>
+        <p className="text-sm text-gray-400 mt-4">
+          Connect your MetaMask wallet to get started
+        </p>
+      </div>
+    </div>
+  );
+}
 
-        {!isWalletConnected ? (
-          /* Step 1: Connect Wallet */
-          <div className="space-y-4">
-            <button
-              onClick={handleConnect}
-              disabled={connecting}
-              className="inline-flex items-center gap-3 bg-gradient-to-r from-brand-500 to-brand-600 text-white px-8 py-4 rounded-2xl text-lg font-semibold hover:from-brand-600 hover:to-brand-700 transition-all shadow-lg shadow-brand-500/25 disabled:opacity-60 disabled:cursor-not-allowed"
+function RegisterScreen() {
+  const { walletAddress, registerOnChain, isLoading } = useStore();
+  const [name, setName] = useState("");
+  const [selectedRole, setSelectedRole] = useState<
+    "merchant" | "customer" | null
+  >(null);
+  const [error, setError] = useState("");
+
+  const handleRegister = async () => {
+    if (!name.trim()) {
+      setError("Please enter your name");
+      return;
+    }
+    if (!selectedRole) {
+      setError("Please select a role");
+      return;
+    }
+    setError("");
+    const success = await registerOnChain(selectedRole, name.trim());
+    if (!success) {
+      setError(
+        "Registration failed. Make sure you're connected to the Hardhat network.",
+      );
+    }
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 via-brand-50/30 to-gray-100 relative overflow-hidden">
+      <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
+        <div className="absolute -top-40 -right-40 w-80 h-80 bg-brand-200/30 rounded-full blur-3xl" />
+        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-brand-300/20 rounded-full blur-3xl" />
+      </div>
+      <div className="text-center relative z-10 px-4 animate-slide-up max-w-md w-full">
+        <div className="flex items-center justify-center gap-3 mb-3">
+          <div className="w-14 h-14 bg-gradient-to-br from-brand-400 to-brand-600 rounded-2xl flex items-center justify-center shadow-lg shadow-brand-500/25">
+            <span className="text-white font-bold text-2xl">FL</span>
+          </div>
+        </div>
+        <h1 className="text-3xl font-bold text-gray-900 tracking-tight">
+          Register
+        </h1>
+
+        <div className="inline-flex items-center gap-2 bg-emerald-50 text-emerald-700 px-4 py-2 rounded-full text-sm font-medium mt-4 ring-1 ring-emerald-600/10">
+          <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
+          <code className="font-mono">
+            {walletAddress?.slice(0, 6)}...{walletAddress?.slice(-4)}
+          </code>
+        </div>
+
+        <p className="text-gray-500 mt-4 mb-6 text-sm">
+          This wallet is not registered yet. Choose your role — this is
+          permanent and stored on the blockchain.
+        </p>
+
+        <div className="bg-white rounded-2xl p-6 shadow-card border border-gray-100 text-left space-y-4">
+          <div>
+            <label
+              htmlFor="name"
+              className="text-sm font-medium text-gray-700 block mb-1.5"
             >
-              <Wallet size={24} />
-              {connecting ? "Connecting..." : "Connect Wallet"}
-            </button>
-            <p className="text-sm text-gray-400">
-              Connect your MetaMask wallet to get started
-            </p>
+              Your Name
+            </label>
+            <input
+              id="name"
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Enter your name or business name"
+              className="w-full border border-gray-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-400 outline-none transition-all"
+            />
           </div>
-        ) : (
-          /* Step 2: Choose Role */
-          <div className="animate-fade-in">
-            <div className="inline-flex items-center gap-2 bg-emerald-50 text-emerald-700 px-4 py-2 rounded-full text-sm font-medium mb-8 ring-1 ring-emerald-600/10">
-              <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
-              Connected:{" "}
-              <code className="font-mono">
-                {walletAddress?.slice(0, 6)}...{walletAddress?.slice(-4)}
-              </code>
-            </div>
 
-            <p className="text-gray-600 mb-6 text-sm">
-              Choose your role to continue
+          <div>
+            <p className="text-sm font-medium text-gray-700 mb-2">
+              Select Role
             </p>
-
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              {roles.map(({ role, label, desc, icon, gradient, iconBg }) => (
-                <button
-                  key={role}
-                  onClick={() =>
-                    walletAddress && loginWithRole(role, walletAddress)
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={() => setSelectedRole("merchant")}
+                className={`p-4 rounded-xl border-2 text-left transition-all ${
+                  selectedRole === "merchant"
+                    ? "border-amber-400 bg-amber-50"
+                    : "border-gray-100 hover:border-gray-200"
+                }`}
+              >
+                <Store
+                  size={24}
+                  className={
+                    selectedRole === "merchant"
+                      ? "text-amber-600"
+                      : "text-gray-400"
                   }
-                  className="bg-white rounded-2xl p-6 w-full sm:w-56 shadow-card hover:shadow-card-hover border border-gray-100 hover:border-gray-200 transition-all duration-200 text-left group hover:-translate-y-1"
-                >
-                  <div
-                    className={`w-12 h-12 rounded-xl flex items-center justify-center mb-4 ${iconBg} group-hover:scale-110 transition-transform duration-200`}
-                  >
-                    {icon}
-                  </div>
-                  <h3 className="font-semibold text-lg text-gray-900 mb-1">
-                    {label}
-                  </h3>
-                  <p className="text-sm text-gray-500 leading-relaxed">
-                    {desc}
-                  </p>
-                  <div
-                    className={`mt-4 h-1 w-12 rounded-full bg-gradient-to-r ${gradient} opacity-60 group-hover:w-full group-hover:opacity-100 transition-all duration-300`}
-                  />
-                </button>
-              ))}
+                />
+                <p className="font-semibold text-gray-900 mt-2">Merchant</p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Create & sell memberships
+                </p>
+              </button>
+              <button
+                onClick={() => setSelectedRole("customer")}
+                className={`p-4 rounded-xl border-2 text-left transition-all ${
+                  selectedRole === "customer"
+                    ? "border-blue-400 bg-blue-50"
+                    : "border-gray-100 hover:border-gray-200"
+                }`}
+              >
+                <User
+                  size={24}
+                  className={
+                    selectedRole === "customer"
+                      ? "text-blue-600"
+                      : "text-gray-400"
+                  }
+                />
+                <p className="font-semibold text-gray-900 mt-2">Customer</p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Browse & buy memberships
+                </p>
+              </button>
             </div>
           </div>
-        )}
+
+          {error && <p className="text-sm text-red-500">{error}</p>}
+
+          <button
+            onClick={handleRegister}
+            disabled={isLoading}
+            className="w-full flex items-center justify-center gap-2 bg-brand-500 text-white py-3 rounded-xl text-sm font-medium hover:bg-brand-600 transition-colors shadow-sm disabled:opacity-60"
+          >
+            {isLoading ? <Loader2 size={16} className="animate-spin" /> : null}
+            {isLoading ? "Registering on blockchain..." : "Register"}
+          </button>
+        </div>
+
+        <p className="text-xs text-gray-400 mt-4">
+          Admin accounts are set during contract deployment
+        </p>
       </div>
     </div>
   );

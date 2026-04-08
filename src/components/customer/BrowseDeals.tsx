@@ -77,7 +77,8 @@ export function BrowseDeals() {
               ) : (
                 <button
                   onClick={() => purchaseMembership(plan.id)}
-                  className="w-full flex items-center justify-center gap-2 bg-brand-500 text-white py-2.5 rounded-xl text-sm font-medium hover:bg-brand-600 transition-colors shadow-sm"
+                  disabled={useStore.getState().isLoading}
+                  className="w-full flex items-center justify-center gap-2 bg-brand-500 text-white py-2.5 rounded-xl text-sm font-medium hover:bg-brand-600 transition-colors shadow-sm disabled:opacity-60"
                 >
                   <ShoppingCart size={16} /> Purchase
                 </button>
