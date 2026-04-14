@@ -28,6 +28,7 @@ interface AppState {
   walletAddress: string | null;
   onChainRole: Role;
   isLoading: boolean;
+  pollingInterval: any;
   connectWallet: () => Promise<string | null>;
   checkOnChainRole: (address: string) => Promise<Role>;
   registerOnChain: (
@@ -50,6 +51,8 @@ interface AppState {
   approveMerchantOnChain: (registrationId: number) => Promise<boolean>;
   rejectMerchantOnChain: (registrationId: number) => Promise<boolean>;
   loadPendingMerchants: () => Promise<void>;
+  startMerchantApprovalPolling: (merchantAddress: string) => void;
+  stopMerchantApprovalPolling: () => void;
 
   // Keep existing mock data for UI parts not yet on-chain
   merchants: Merchant[];
@@ -113,6 +116,42 @@ async function loadPendingMerchantsFromChain(): Promise<
   } catch (err) {
     console.error("Failed to load pending merchants:", err);
     return [];
+  }
+}
+
+// Helper: check if a merchant address has been approved
+async function checkMerchantApprovalStatus(
+  merchantAddress: string,
+): Promise<"pending" | "approved" | "rejected" | null> {
+  const contract = await getContract();
+  if (!contract) return null;
+
+  try {
+    const pendingIds = await contract.getPendingMerchantRegistrations();
+
+    for (const regId of pendingIds) {
+      const reg = await contract.getMerchantRegistration(Number(regId));
+      if (reg.merchant.toLowerCase() === merchantAddress.toLowerCase()) {
+        // Status: 0 = Pending, 1 = Approved, 2 = Rejected
+        const statusMap = ["pending", "approved", "rejected"];
+        return statusMap[Number(reg.status)] as
+          | "pending"
+          | "approved"
+          | "rejected";
+      }
+    }
+
+    // If not in pending list, they might be already approved (in active merchants)
+    const user = await contract.getUser(merchantAddress);
+    if (user.role === 2) {
+      // Role.Merchant = 2
+      return "approved";
+    }
+
+    return null;
+  } catch (err) {
+    console.error("Failed to check merchant approval status:", err);
+    return null;
   }
 }
 
@@ -212,6 +251,7 @@ export const useStore = create<AppState>((set, get) => ({
   walletAddress: null,
   onChainRole: Role.None,
   isLoading: false,
+  pollingInterval: null,
 
   // Pending merchant registrations
   pendingMerchantRegistrations: [],
@@ -551,6 +591,52 @@ export const useStore = create<AppState>((set, get) => ({
       console.error("Failed to reject merchant:", err);
       set({ isLoading: false });
       return false;
+    }
+  },
+
+  // Polling interval ID (stored as any for interval tracking)
+  pollingInterval: null as any,
+
+  // Start polling for merchant approval status
+  startMerchantApprovalPolling: (merchantAddress: string) => {
+    // Clear any existing polling
+    get().stopMerchantApprovalPolling();
+
+    // Poll every 5 seconds
+    const intervalId = setInterval(async () => {
+      const state = get();
+      if (!state.currentUser || state.currentUser.role !== "merchant") {
+        // Stop polling if no current merchant user
+        get().stopMerchantApprovalPolling();
+        return;
+      }
+
+      const status = await checkMerchantApprovalStatus(merchantAddress);
+
+      if (status === "approved") {
+        // Update current user status to approved
+        if (state.currentUser && state.currentUser.role === "merchant") {
+          set({
+            currentUser: {
+              ...state.currentUser,
+              status: "approved",
+            },
+          });
+        }
+        // Stop polling once approved
+        get().stopMerchantApprovalPolling();
+      }
+    }, 5000); // Check every 5 seconds
+
+    set({ pollingInterval: intervalId });
+  },
+
+  // Stop the polling
+  stopMerchantApprovalPolling: () => {
+    const state = get();
+    if (state.pollingInterval) {
+      clearInterval(state.pollingInterval);
+      set({ pollingInterval: null });
     }
   },
 

@@ -4,6 +4,7 @@ import { useStore } from "@/store";
 import { Role } from "@/contracts/FoodLedger";
 import { AdminDashboard } from "@/components/admin/AdminDashboard";
 import { MerchantDashboard } from "@/components/merchant/MerchantDashboard";
+import { PendingApprovalScreen } from "@/components/merchant/PendingApproval";
 import { CustomerDashboard } from "@/components/customer/CustomerDashboard";
 import {
   Store,
@@ -13,7 +14,7 @@ import {
   ChevronDown,
   Loader2,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 export default function Home() {
   const {
@@ -25,8 +26,30 @@ export default function Home() {
     isLoading,
     connectWallet,
     registerOnChain,
+    startMerchantApprovalPolling,
+    stopMerchantApprovalPolling,
   } = useStore();
   const [showUserMenu, setShowUserMenu] = useState(false);
+
+  // Start polling when merchant is pending
+  useEffect(() => {
+    if (
+      currentUser &&
+      currentUser.role === "merchant" &&
+      currentUser.status === "pending"
+    ) {
+      startMerchantApprovalPolling(currentUser.walletAddress);
+      return () => {
+        stopMerchantApprovalPolling();
+      };
+    }
+  }, [
+    currentUser?.role,
+    currentUser?.status,
+    currentUser?.walletAddress,
+    startMerchantApprovalPolling,
+    stopMerchantApprovalPolling,
+  ]);
 
   // Step 1: Not connected → show Connect Wallet
   if (!isWalletConnected) {
@@ -47,7 +70,87 @@ export default function Home() {
     );
   }
 
-  // Step 4: Logged in → show dashboard
+  // Step 4: Merchant waiting for approval
+  if (currentUser.role === "merchant" && currentUser.status === "pending") {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <nav className="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-gray-200/60 shadow-nav">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex items-center justify-between h-16">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 bg-gradient-to-br from-brand-400 to-brand-600 rounded-xl flex items-center justify-center shadow-sm">
+                  <span className="text-white font-bold text-sm">FL</span>
+                </div>
+                <span className="font-bold text-lg tracking-tight text-gray-900">
+                  FoodLedger
+                </span>
+              </div>
+              <div className="relative">
+                <button
+                  onClick={() => setShowUserMenu(!showUserMenu)}
+                  className="flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-gray-100 transition-colors"
+                >
+                  <div className="w-8 h-8 bg-gradient-to-br from-brand-400 to-brand-600 rounded-full flex items-center justify-center">
+                    <span className="text-white text-xs font-semibold">
+                      {currentUser.name.charAt(0)}
+                    </span>
+                  </div>
+                  <div className="hidden sm:block text-left">
+                    <p className="text-sm font-medium text-gray-900">
+                      {currentUser.name}
+                    </p>
+                    <p className="text-xs text-gray-500 font-mono">
+                      {currentUser.walletAddress.slice(0, 6)}...
+                      {currentUser.walletAddress.slice(-4)}
+                    </p>
+                  </div>
+                  <ChevronDown size={16} className="text-gray-400" />
+                </button>
+                {showUserMenu && (
+                  <>
+                    <div
+                      className="fixed inset-0 z-40"
+                      onClick={() => setShowUserMenu(false)}
+                    />
+                    <div className="absolute right-0 mt-2 w-64 bg-white rounded-xl shadow-lg border border-gray-200 py-2 z-50 animate-fade-in">
+                      <div className="px-4 py-3 border-b border-gray-100">
+                        <p className="text-sm font-semibold text-gray-900">
+                          {currentUser.name}
+                        </p>
+                        <div className="flex items-center gap-1.5 mt-2">
+                          <Wallet size={12} className="text-gray-400" />
+                          <code className="text-xs text-gray-500 font-mono">
+                            {currentUser.walletAddress.slice(0, 6)}...
+                            {currentUser.walletAddress.slice(-4)}
+                          </code>
+                        </div>
+                      </div>
+                      <div className="py-1">
+                        <button
+                          onClick={() => {
+                            setShowUserMenu(false);
+                            logout();
+                          }}
+                          className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                        >
+                          <LogOut size={16} /> Sign out
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        </nav>
+        <main className="animate-fade-in">
+          <PendingApprovalScreen />
+        </main>
+      </div>
+    );
+  }
+
+  // Step 5: Logged in → show dashboard
   const handleLogout = () => {
     setShowUserMenu(false);
     logout();
