@@ -4,6 +4,7 @@ pragma solidity ^0.8.24;
 contract FoodLedger {
     // ===== Roles =====
     enum Role { None, Admin, Merchant, Customer }
+    enum MerchantStatus { Pending, Approved, Rejected }
 
     // ===== Structs =====
     struct UserInfo {
@@ -11,6 +12,14 @@ contract FoodLedger {
         string name;
         bool isActive;
         uint256 registeredAt;
+    }
+
+    struct MerchantRegistration {
+        address merchant;
+        string name;
+        MerchantStatus status;
+        uint256 requestedAt;
+        uint256 reviewedAt;
     }
 
     struct MembershipPlan {
@@ -39,10 +48,15 @@ contract FoodLedger {
     address public owner;
     uint256 public nextPlanId;
     uint256 public nextPurchaseId;
+    uint256 public nextMerchantRegistrationId;
 
     mapping(address => UserInfo) public users;
     mapping(uint256 => MembershipPlan) public plans;
     mapping(uint256 => Purchase) public purchases;
+
+    // Merchant registration approval workflow
+    mapping(uint256 => MerchantRegistration) public merchantRegistrations;
+    mapping(address => uint256) public merchantRegistrationId; // address => registration ID
 
     // Track data per user
     mapping(address => uint256[]) public buyerPurchases;
@@ -52,9 +66,13 @@ contract FoodLedger {
     // Track all registered addresses by role
     address[] public allMerchants;
     address[] public allCustomers;
+    uint256[] public pendingMerchantRegistrations;
 
     // ===== Events =====
     event UserRegistered(address indexed user, Role role, string name);
+    event MerchantRegistrationRequested(uint256 indexed registrationId, address indexed merchant, string name);
+    event MerchantRegistrationApproved(uint256 indexed registrationId, address indexed merchant);
+    event MerchantRegistrationRejected(uint256 indexed registrationId, address indexed merchant);
     event PlanCreated(uint256 indexed planId, address indexed merchant, string title, uint256 priceInWei);
     event MembershipPurchased(uint256 indexed purchaseId, uint256 indexed planId, address indexed buyer, address merchant, uint256 amountPaid);
     event PlanToggled(uint256 indexed planId, bool isActive);
@@ -91,14 +109,71 @@ contract FoodLedger {
     // ===== Registration =====
     function registerAsMerchant(string memory _name) external {
         require(users[msg.sender].role == Role.None, "Already registered");
-        users[msg.sender] = UserInfo({
-            role: Role.Merchant,
+        require(merchantRegistrationId[msg.sender] == 0, "Already submitted registration");
+        
+        uint256 regId = nextMerchantRegistrationId++;
+        merchantRegistrations[regId] = MerchantRegistration({
+            merchant: msg.sender,
             name: _name,
+            status: MerchantStatus.Pending,
+            requestedAt: block.timestamp,
+            reviewedAt: 0
+        });
+        
+        merchantRegistrationId[msg.sender] = regId;
+        pendingMerchantRegistrations.push(regId);
+        
+        emit MerchantRegistrationRequested(regId, msg.sender, _name);
+    }
+
+    function approveMerchantRegistration(uint256 _regId) external onlyAdmin {
+        MerchantRegistration storage reg = merchantRegistrations[_regId];
+        require(reg.merchant != address(0), "Registration not found");
+        require(reg.status == MerchantStatus.Pending, "Not pending");
+        
+        // Update registration status
+        reg.status = MerchantStatus.Approved;
+        reg.reviewedAt = block.timestamp;
+        
+        // Register as merchant
+        users[reg.merchant] = UserInfo({
+            role: Role.Merchant,
+            name: reg.name,
             isActive: true,
             registeredAt: block.timestamp
         });
-        allMerchants.push(msg.sender);
-        emit UserRegistered(msg.sender, Role.Merchant, _name);
+        
+        allMerchants.push(reg.merchant);
+        
+        // Remove from pending list
+        _removePendingRegistration(_regId);
+        
+        emit MerchantRegistrationApproved(_regId, reg.merchant);
+        emit UserRegistered(reg.merchant, Role.Merchant, reg.name);
+    }
+
+    function rejectMerchantRegistration(uint256 _regId) external onlyAdmin {
+        MerchantRegistration storage reg = merchantRegistrations[_regId];
+        require(reg.merchant != address(0), "Registration not found");
+        require(reg.status == MerchantStatus.Pending, "Not pending");
+        
+        reg.status = MerchantStatus.Rejected;
+        reg.reviewedAt = block.timestamp;
+        
+        // Remove from pending list
+        _removePendingRegistration(_regId);
+        
+        emit MerchantRegistrationRejected(_regId, reg.merchant);
+    }
+
+    function _removePendingRegistration(uint256 _regId) internal {
+        for (uint256 i = 0; i < pendingMerchantRegistrations.length; i++) {
+            if (pendingMerchantRegistrations[i] == _regId) {
+                pendingMerchantRegistrations[i] = pendingMerchantRegistrations[pendingMerchantRegistrations.length - 1];
+                pendingMerchantRegistrations.pop();
+                break;
+            }
+        }
     }
 
     function registerAsCustomer(string memory _name) external {
@@ -239,5 +314,22 @@ contract FoodLedger {
     function isMembershipValid(uint256 _purchaseId) external view returns (bool) {
         Purchase memory p = purchases[_purchaseId];
         return p.buyer != address(0) && block.timestamp <= p.expiresAt;
+    }
+
+    // ===== Merchant Registration Approval Getters =====
+    function getMerchantRegistration(uint256 _regId) external view returns (MerchantRegistration memory) {
+        return merchantRegistrations[_regId];
+    }
+
+    function getPendingMerchantRegistrations() external view returns (uint256[] memory) {
+        return pendingMerchantRegistrations;
+    }
+
+    function getPendingMerchantRegistrationsCount() external view returns (uint256) {
+        return pendingMerchantRegistrations.length;
+    }
+
+    function getTotalMerchantRegistrations() external view returns (uint256) {
+        return nextMerchantRegistrationId;
     }
 }

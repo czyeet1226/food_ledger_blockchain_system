@@ -9,12 +9,25 @@ export enum Role {
   Customer = 3,
 }
 
+// Merchant Status enum
+export enum MerchantStatus {
+  Pending = 0,
+  Approved = 1,
+  Rejected = 2,
+}
+
 export const FOODLEDGER_ABI = [
   "function getUser(address _addr) view returns (tuple(uint8 role, string name, bool isActive, uint256 registeredAt))",
   "function getMyRole() view returns (uint8)",
   "function registerAsMerchant(string _name)",
   "function registerAsCustomer(string _name)",
   "function registerAdmin(address _addr, string _name)",
+  "function approveMerchantRegistration(uint256 _regId)",
+  "function rejectMerchantRegistration(uint256 _regId)",
+  "function getMerchantRegistration(uint256 _regId) view returns (tuple(address merchant, string name, uint8 status, uint256 requestedAt, uint256 reviewedAt))",
+  "function getPendingMerchantRegistrations() view returns (uint256[])",
+  "function getPendingMerchantRegistrationsCount() view returns (uint256)",
+  "function getTotalMerchantRegistrations() view returns (uint256)",
   "function createPlan(string _title, string _description, uint256 _priceInWei, uint256 _durationDays, uint256 _maxSupply)",
   "function purchaseMembership(uint256 _planId) payable",
   "function togglePlan(uint256 _planId)",
@@ -33,4 +46,7 @@ export const FOODLEDGER_ABI = [
   "event MembershipPurchased(uint256 indexed purchaseId, uint256 indexed planId, address indexed buyer, address merchant, uint256 amountPaid)",
   "event UserRegistered(address indexed user, uint8 role, string name)",
   "event PlanToggled(uint256 indexed planId, bool isActive)",
+  "event MerchantRegistrationRequested(uint256 indexed registrationId, address indexed merchant, string name)",
+  "event MerchantRegistrationApproved(uint256 indexed registrationId, address indexed merchant)",
+  "event MerchantRegistrationRejected(uint256 indexed registrationId, address indexed merchant)",
 ] as const;

@@ -39,6 +39,18 @@ interface AppState {
   // On-chain data loader
   loadOnChainData: () => Promise<void>;
 
+  // Merchant registration approval (on-chain)
+  pendingMerchantRegistrations: Array<{
+    id: number;
+    merchant: string;
+    name: string;
+    status: number;
+    requestedAt: number;
+  }>;
+  approveMerchantOnChain: (registrationId: number) => Promise<boolean>;
+  rejectMerchantOnChain: (registrationId: number) => Promise<boolean>;
+  loadPendingMerchants: () => Promise<void>;
+
   // Keep existing mock data for UI parts not yet on-chain
   merchants: Merchant[];
   approveMerchant: (id: string) => void;
@@ -67,6 +79,41 @@ interface AppState {
     status: DisputeStatus,
     resolution?: string,
   ) => void;
+}
+
+// Helper: load pending merchant registrations from the blockchain
+async function loadPendingMerchantsFromChain(): Promise<
+  Array<{
+    id: number;
+    merchant: string;
+    name: string;
+    status: number;
+    requestedAt: number;
+  }>
+> {
+  const contract = await getContract();
+  if (!contract) return [];
+
+  try {
+    const pendingIds = await contract.getPendingMerchantRegistrations();
+    const pendingMerchants = [];
+
+    for (const regId of pendingIds) {
+      const reg = await contract.getMerchantRegistration(Number(regId));
+      pendingMerchants.push({
+        id: Number(regId),
+        merchant: reg.merchant.toLowerCase(),
+        name: reg.name,
+        status: Number(reg.status),
+        requestedAt: Number(reg.requestedAt),
+      });
+    }
+
+    return pendingMerchants;
+  } catch (err) {
+    console.error("Failed to load pending merchants:", err);
+    return [];
+  }
 }
 
 // Helper: load all plans and purchases from the blockchain
@@ -165,6 +212,9 @@ export const useStore = create<AppState>((set, get) => ({
   walletAddress: null,
   onChainRole: Role.None,
   isLoading: false,
+
+  // Pending merchant registrations
+  pendingMerchantRegistrations: [],
 
   connectWallet: async () => {
     if (typeof window === "undefined") return null;
@@ -308,6 +358,7 @@ export const useStore = create<AppState>((set, get) => ({
       // After registration, set user and load data
       const address = get().walletAddress!;
       if (role === "merchant") {
+        // For merchants, they're now in pending status
         set({
           onChainRole: Role.Merchant,
           currentUser: {
@@ -322,12 +373,14 @@ export const useStore = create<AppState>((set, get) => ({
             logo: "",
             email: "",
             phone: "",
-            status: "approved",
+            status: "pending",
             createdAt: new Date().toISOString(),
             isActive: true,
           } as Merchant,
           isLoading: false,
         });
+        // Load pending merchants to show the new request
+        await get().loadPendingMerchants();
       } else {
         set({
           onChainRole: Role.Customer,
@@ -343,6 +396,8 @@ export const useStore = create<AppState>((set, get) => ({
           } as Customer,
           isLoading: false,
         });
+        // Load on-chain data for customers
+        await get().loadOnChainData();
       }
       return true;
     } catch (err) {
@@ -374,11 +429,13 @@ export const useStore = create<AppState>((set, get) => ({
         { memberships, transactions },
         merchantAddrs,
         customerAddrs,
+        pendingMerchants,
       ] = await Promise.all([
         loadAllPlansFromChain(),
         loadAllPurchasesFromChain(),
         contract.getAllMerchants(),
         contract.getAllCustomers(),
+        loadPendingMerchantsFromChain(),
       ]);
 
       // Build merchant list from on-chain data
@@ -429,9 +486,71 @@ export const useStore = create<AppState>((set, get) => ({
         transactions,
         merchants,
         customers,
+        pendingMerchantRegistrations: pendingMerchants,
       });
     } catch (err) {
       console.error("Failed to load on-chain data:", err);
+    }
+  },
+
+  // Load pending merchant registrations
+  loadPendingMerchants: async () => {
+    try {
+      const pendingMerchants = await loadPendingMerchantsFromChain();
+      set({ pendingMerchantRegistrations: pendingMerchants });
+    } catch (err) {
+      console.error("Failed to load pending merchants:", err);
+    }
+  },
+
+  // Approve a merchant registration on-chain
+  approveMerchantOnChain: async (registrationId: number) => {
+    try {
+      set({ isLoading: true });
+      const contract = await getContract(true);
+      if (!contract) {
+        set({ isLoading: false });
+        return false;
+      }
+
+      const tx = await contract.approveMerchantRegistration(registrationId);
+      await tx.wait();
+
+      // Reload pending merchants and general data
+      await get().loadPendingMerchants();
+      await get().loadOnChainData();
+
+      set({ isLoading: false });
+      return true;
+    } catch (err) {
+      console.error("Failed to approve merchant:", err);
+      set({ isLoading: false });
+      return false;
+    }
+  },
+
+  // Reject a merchant registration on-chain
+  rejectMerchantOnChain: async (registrationId: number) => {
+    try {
+      set({ isLoading: true });
+      const contract = await getContract(true);
+      if (!contract) {
+        set({ isLoading: false });
+        return false;
+      }
+
+      const tx = await contract.rejectMerchantRegistration(registrationId);
+      await tx.wait();
+
+      // Reload pending merchants
+      await get().loadPendingMerchants();
+
+      set({ isLoading: false });
+      return true;
+    } catch (err) {
+      console.error("Failed to reject merchant:", err);
+      set({ isLoading: false });
+      return false;
     }
   },
 
