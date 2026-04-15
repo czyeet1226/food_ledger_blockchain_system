@@ -20,6 +20,11 @@ import type {
   DisputeStatus,
 } from "@/types";
 import { mockDisputes, mockAds, mockAnnouncements } from "./mockData";
+import {
+  saveMerchantProfile,
+  getMerchantProfile,
+  getAllMerchantProfiles,
+} from "@/lib/merchantDB";
 
 interface AppState {
   // Auth
@@ -28,7 +33,8 @@ interface AppState {
   walletAddress: string | null;
   onChainRole: Role;
   isLoading: boolean;
-  pollingInterval: any;
+  chainResetDetected: boolean;
+  pollingInterval: ReturnType<typeof setInterval> | null;
   connectWallet: () => Promise<string | null>;
   checkOnChainRole: (address: string) => Promise<Role>;
   registerOnChain: (
@@ -234,9 +240,28 @@ function getProvider() {
   return new ethers.BrowserProvider(ethereum);
 }
 
+async function isContractDeployed(): Promise<boolean> {
+  const provider = getProvider();
+  if (!provider) return false;
+  const code = await provider.getCode(FOODLEDGER_ADDRESS);
+  return code !== "0x";
+}
+
 async function getContract(withSigner = false) {
   const provider = getProvider();
   if (!provider) return null;
+
+  // Check if contract still exists (catches Hardhat restart)
+  const code = await provider.getCode(FOODLEDGER_ADDRESS);
+  if (code === "0x") {
+    console.warn(
+      "Contract not found at",
+      FOODLEDGER_ADDRESS,
+      "— Hardhat may have been restarted. Please redeploy.",
+    );
+    return null;
+  }
+
   if (withSigner) {
     const signer = await provider.getSigner();
     return new ethers.Contract(FOODLEDGER_ADDRESS, FOODLEDGER_ABI, signer);
@@ -251,50 +276,143 @@ export const useStore = create<AppState>((set, get) => ({
   walletAddress: null,
   onChainRole: Role.None,
   isLoading: false,
+  chainResetDetected: false,
   pollingInterval: null,
-
-  // Pending merchant registrations
   pendingMerchantRegistrations: [],
 
   connectWallet: async () => {
     if (typeof window === "undefined") return null;
-    const ethereum = (
-      window as unknown as {
-        ethereum?: { request: (args: { method: string }) => Promise<string[]> };
-      }
-    ).ethereum;
 
-    // Wait for MetaMask injection
-    if (!ethereum) {
-      await new Promise((resolve) => setTimeout(resolve, 500));
-      const retry = (
-        window as unknown as {
-          ethereum?: {
-            request: (args: { method: string }) => Promise<string[]>;
-          };
+    // Wait for MetaMask to inject window.ethereum (retry up to 3 seconds)
+    let ethereum:
+      | {
+          request: (args: {
+            method: string;
+            params?: unknown[];
+          }) => Promise<string[]>;
         }
-      ).ethereum;
-      if (!retry) {
-        alert("MetaMask is not detected. Please install MetaMask and refresh.");
-        return null;
-      }
+      | undefined;
+    for (let i = 0; i < 6; i++) {
+      ethereum = (window as unknown as { ethereum?: typeof ethereum }).ethereum;
+      if (ethereum) break;
+      await new Promise((resolve) => setTimeout(resolve, 500));
     }
 
-    const eth = (
-      window as unknown as {
-        ethereum: { request: (args: { method: string }) => Promise<string[]> };
-      }
-    ).ethereum;
+    if (!ethereum) {
+      alert("MetaMask is not detected. Please install MetaMask and refresh.");
+      return null;
+    }
 
     try {
       set({ isLoading: true });
-      const accounts = await eth.request({ method: "eth_requestAccounts" });
+
+      // Force switch to Hardhat network (chain ID 31337 = 0x7A69)
+      try {
+        await ethereum.request({
+          method: "wallet_switchEthereumChain",
+          params: [{ chainId: "0x7A69" }],
+        });
+      } catch {
+        // If Hardhat network not added yet, add it
+        try {
+          await ethereum.request({
+            method: "wallet_addEthereumChain",
+            params: [
+              {
+                chainId: "0x7A69",
+                chainName: "Hardhat",
+                rpcUrls: ["http://127.0.0.1:8545"],
+                nativeCurrency: { name: "ETH", symbol: "ETH", decimals: 18 },
+              },
+            ],
+          });
+        } catch {
+          alert("Please switch to the Hardhat network in MetaMask.");
+          set({ isLoading: false });
+          return null;
+        }
+      }
+
+      const accounts = await ethereum.request({
+        method: "eth_requestAccounts",
+      });
       const address = accounts[0];
       set({ isWalletConnected: true, walletAddress: address });
+
+      // Check if contract is still deployed (Hardhat restart detection)
+      const deployed = await isContractDeployed();
+      if (!deployed) {
+        set({
+          chainResetDetected: true,
+          isLoading: false,
+        });
+        alert(
+          "Smart contract not found on-chain. Hardhat may have been restarted.\n\n" +
+            "Please redeploy your contracts:\n" +
+            "cd backend && npx hardhat run scripts/deploy.ts --network localhost\n\n" +
+            "Your Firebase profile data is safe — just re-register on-chain after redeploying.",
+        );
+        return address;
+      }
+
+      set({ chainResetDetected: false });
 
       // Check on-chain role
       const role = await get().checkOnChainRole(address);
       set({ onChainRole: role, isLoading: false });
+
+      // Detect chain reset: wallet has no on-chain role but has a Firebase profile
+      // Auto re-register on-chain in the background using Firebase data
+      if (role === Role.None) {
+        const fbProfile = await getMerchantProfile(address);
+        if (fbProfile) {
+          try {
+            set({ isLoading: true, chainResetDetected: true });
+            console.log(
+              "Chain reset detected — auto re-registering merchant:",
+              fbProfile.businessName,
+            );
+
+            const contract = await getContract(true);
+            if (contract) {
+              const tx = await contract.registerAsMerchant(
+                fbProfile.businessName,
+              );
+              await tx.wait();
+
+              set({
+                onChainRole: Role.Merchant,
+                chainResetDetected: false,
+                currentUser: {
+                  id: address,
+                  walletAddress: address,
+                  role: "merchant",
+                  name: fbProfile.businessName,
+                  businessName: fbProfile.businessName,
+                  description: fbProfile.description || "",
+                  cuisine: fbProfile.cuisine || "",
+                  location: fbProfile.location || "",
+                  logo: fbProfile.logo || "",
+                  email: fbProfile.email || "",
+                  phone: fbProfile.phone || "",
+                  status: "approved",
+                  createdAt: new Date().toISOString(),
+                  isActive: true,
+                } as Merchant,
+                isLoading: false,
+              });
+
+              // Load on-chain data
+              await get().loadOnChainData();
+              return address;
+            }
+          } catch (err) {
+            console.error("Auto re-registration failed:", err);
+            set({ isLoading: false });
+            // Fall through to normal registration page
+          }
+        }
+      }
 
       // If already registered, auto-login
       if (role !== Role.None) {
@@ -310,19 +428,22 @@ export const useStore = create<AppState>((set, get) => ({
           const userRole = roleMap[role] || "customer";
 
           if (userRole === "merchant") {
+            // Load profile from Firebase — Firebase is the source of truth for display name
+            const fbProfile = await getMerchantProfile(address);
+            const displayName = fbProfile?.businessName || userName;
             set({
               currentUser: {
                 id: address,
                 walletAddress: address,
                 role: "merchant",
-                name: userName,
-                businessName: userName,
-                description: "",
-                cuisine: "",
-                location: "",
-                logo: "",
-                email: "",
-                phone: "",
+                name: displayName,
+                businessName: displayName,
+                description: fbProfile?.description || "",
+                cuisine: fbProfile?.cuisine || "",
+                location: fbProfile?.location || "",
+                logo: fbProfile?.logo || "",
+                email: fbProfile?.email || "",
+                phone: fbProfile?.phone || "",
                 status: "approved",
                 createdAt: new Date().toISOString(),
                 isActive: true,
@@ -372,11 +493,23 @@ export const useStore = create<AppState>((set, get) => ({
 
   checkOnChainRole: async (address: string) => {
     try {
-      const contract = await getContract();
-      if (!contract) return Role.None;
+      // Create a fresh provider each time to avoid stale connections
+      const provider = getProvider();
+      if (!provider) {
+        console.error("checkOnChainRole: No provider");
+        return Role.None;
+      }
+      const contract = new ethers.Contract(
+        FOODLEDGER_ADDRESS,
+        FOODLEDGER_ABI,
+        provider,
+      );
       const user = await contract.getUser(address);
-      return Number(user.role) as Role;
-    } catch {
+      const role = Number(user.role) as Role;
+      console.log("checkOnChainRole:", address, "role:", role);
+      return role;
+    } catch (err) {
+      console.error("checkOnChainRole failed:", err);
       return Role.None;
     }
   },
@@ -398,7 +531,6 @@ export const useStore = create<AppState>((set, get) => ({
       // After registration, set user and load data
       const address = get().walletAddress!;
       if (role === "merchant") {
-        // For merchants, they're now in pending status
         set({
           onChainRole: Role.Merchant,
           currentUser: {
@@ -413,10 +545,11 @@ export const useStore = create<AppState>((set, get) => ({
             logo: "",
             email: "",
             phone: "",
-            status: "pending",
+            status: "approved",
             createdAt: new Date().toISOString(),
             isActive: true,
           } as Merchant,
+          chainResetDetected: false,
           isLoading: false,
         });
         // Load pending merchants to show the new request
@@ -439,6 +572,8 @@ export const useStore = create<AppState>((set, get) => ({
         // Load on-chain data for customers
         await get().loadOnChainData();
       }
+      // Load on-chain data after registration
+      await get().loadOnChainData();
       return true;
     } catch (err) {
       console.error("Registration failed:", err);
@@ -453,6 +588,7 @@ export const useStore = create<AppState>((set, get) => ({
       isWalletConnected: false,
       walletAddress: null,
       onChainRole: Role.None,
+      chainResetDetected: false,
       plans: [],
       ownedMemberships: [],
       transactions: [],
@@ -478,23 +614,30 @@ export const useStore = create<AppState>((set, get) => ({
         loadPendingMerchantsFromChain(),
       ]);
 
-      // Build merchant list from on-chain data
+      // Build merchant list from on-chain data, merged with Firebase profiles
+      const firebaseProfiles = await getAllMerchantProfiles();
+      const profileMap = new Map(
+        firebaseProfiles.map((p) => [p.walletAddress.toLowerCase(), p]),
+      );
+
       const merchants: Merchant[] = [];
       for (const addr of merchantAddrs) {
         const u = await contract.getUser(addr);
         const lowerAddr = addr.toLowerCase();
+        const fbProfile = profileMap.get(lowerAddr);
+
         merchants.push({
           id: lowerAddr,
           walletAddress: lowerAddr,
           role: "merchant",
           name: u.name,
-          businessName: u.name,
-          description: "",
-          cuisine: "",
-          location: "",
-          logo: "",
-          email: "",
-          phone: "",
+          businessName: fbProfile?.businessName || u.name,
+          description: fbProfile?.description || "",
+          cuisine: fbProfile?.cuisine || "",
+          location: fbProfile?.location || "",
+          logo: fbProfile?.logo || "",
+          email: fbProfile?.email || "",
+          phone: fbProfile?.phone || "",
           status: "approved" as MerchantStatus,
           createdAt: new Date(Number(u.registeredAt) * 1000).toISOString(),
           isActive: u.isActive,
@@ -594,9 +737,6 @@ export const useStore = create<AppState>((set, get) => ({
     }
   },
 
-  // Polling interval ID (stored as any for interval tracking)
-  pollingInterval: null as any,
-
   // Start polling for merchant approval status
   startMerchantApprovalPolling: (merchantAddress: string) => {
     // Clear any existing polling
@@ -619,8 +759,8 @@ export const useStore = create<AppState>((set, get) => ({
           set({
             currentUser: {
               ...state.currentUser,
-              status: "approved",
-            },
+              status: "approved" as MerchantStatus,
+            } as Merchant,
           });
         }
         // Stop polling once approved
@@ -654,10 +794,28 @@ export const useStore = create<AppState>((set, get) => ({
         m.id === id ? { ...m, status: "rejected" as MerchantStatus } : m,
       ),
     })),
-  updateMerchant: (id, data) =>
+  updateMerchant: (id, data) => {
+    // Save to Firebase
+    import("@/lib/merchantDB").then(({ updateMerchantField }) => {
+      updateMerchantField(id, data).catch(console.error);
+    });
     set((s) => ({
       merchants: s.merchants.map((m) => (m.id === id ? { ...m, ...data } : m)),
-    })),
+      // Also update currentUser if it's the same merchant
+      currentUser:
+        s.currentUser?.id === id
+          ? {
+              ...s.currentUser,
+              ...data,
+              // Keep name in sync with businessName
+              name:
+                "businessName" in data
+                  ? (data as { businessName: string }).businessName
+                  : s.currentUser.name,
+            }
+          : s.currentUser,
+    }));
+  },
   registerMerchant: (data) =>
     set((s) => ({
       merchants: [

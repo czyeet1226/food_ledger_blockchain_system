@@ -30,6 +30,57 @@ export default function Home() {
     stopMerchantApprovalPolling,
   } = useStore();
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [autoConnecting, setAutoConnecting] = useState(true);
+
+  // Auto-reconnect on page load
+  useEffect(() => {
+    const autoConnect = async () => {
+      if (typeof window === "undefined") {
+        setAutoConnecting(false);
+        return;
+      }
+
+      // Wait for MetaMask to inject (up to 3 seconds)
+      let ethereum:
+        | {
+            request: (args: { method: string }) => Promise<string[]>;
+            on?: (event: string, handler: (...args: unknown[]) => void) => void;
+          }
+        | undefined;
+      for (let i = 0; i < 6; i++) {
+        ethereum = (window as unknown as { ethereum?: typeof ethereum })
+          .ethereum;
+        if (ethereum) break;
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+
+      if (!ethereum) {
+        setAutoConnecting(false);
+        return;
+      }
+      try {
+        // Check if already connected (doesn't trigger popup)
+        const accounts = await ethereum.request({ method: "eth_accounts" });
+        if (accounts.length > 0) {
+          await connectWallet();
+        }
+      } catch {
+        // ignore
+      }
+      setAutoConnecting(false);
+
+      // Listen for account changes (user switches wallet in MetaMask)
+      if (ethereum.on) {
+        ethereum.on("accountsChanged", () => {
+          window.location.reload();
+        });
+        ethereum.on("chainChanged", () => {
+          window.location.reload();
+        });
+      }
+    };
+    autoConnect();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Start polling when merchant is pending
   useEffect(() => {
@@ -50,6 +101,15 @@ export default function Home() {
     startMerchantApprovalPolling,
     stopMerchantApprovalPolling,
   ]);
+
+  // Show loading while auto-connecting
+  if (autoConnecting) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <Loader2 size={32} className="animate-spin text-brand-500" />
+      </div>
+    );
+  }
 
   // Step 1: Not connected → show Connect Wallet
   if (!isWalletConnected) {
