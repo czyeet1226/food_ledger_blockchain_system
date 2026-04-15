@@ -232,7 +232,7 @@ export function MyMemberships() {
                   const merchantWallet = merchant?.walletAddress || "0x0";
 
                   // Create dispute
-                  createDispute({
+                  const disputeData = {
                     customerId: reportMembership.customerId,
                     merchantId: reportMembership.merchantId,
                     customerName: currentUser?.name || "Unknown",
@@ -242,7 +242,10 @@ export function MyMemberships() {
                     subject: reportTitle,
                     description: reportDescription,
                     txHash: reportMembership.txHash,
-                  });
+                  };
+
+                  console.log("Creating dispute:", disputeData);
+                  createDispute(disputeData);
 
                   setReportSubmitting(false);
                   setReportMembership(null);

@@ -13,6 +13,8 @@ export function DisputeResolution() {
   const [selected, setSelected] = useState<Dispute | null>(null);
   const [resolution, setResolution] = useState("");
 
+  console.log("DisputeResolution - Current disputes:", disputes);
+
   const handleResolve = (status: DisputeStatus) => {
     if (!selected) return;
     updateDisputeStatus(selected.id, status, resolution);
@@ -29,39 +31,48 @@ export function DisputeResolution() {
             ({disputes.length})
           </span>
         </h3>
-        <div className="space-y-3">
-          {disputes.map((d) => (
-            <div
-              key={d.id}
-              className="border border-gray-100 rounded-xl p-5 cursor-pointer hover:border-brand-200 hover:bg-brand-50/30 transition-all"
-              onClick={() => setSelected(d)}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => e.key === "Enter" && setSelected(d)}
-            >
-              <div className="flex items-start justify-between">
-                <div>
-                  <h4 className="font-semibold text-gray-900">{d.subject}</h4>
-                  <p className="text-sm text-gray-500 mt-1 line-clamp-2">
-                    {d.description}
-                  </p>
-                  <div className="flex gap-4 mt-3 text-xs text-gray-400">
-                    <span className="flex items-center gap-1">
-                      <User size={12} />
-                      {d.customerName}
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <Store size={12} />
-                      {d.merchantName}
-                    </span>
-                    <span>Filed: {d.createdAt}</span>
+        {disputes.length === 0 ? (
+          <div className="text-center py-8">
+            <p className="text-gray-500">No disputes yet</p>
+            <p className="text-sm text-gray-400 mt-1">
+              Reported issues will appear here
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {disputes.map((d) => (
+              <div
+                key={d.id}
+                className="border border-gray-100 rounded-xl p-5 cursor-pointer hover:border-brand-200 hover:bg-brand-50/30 transition-all"
+                onClick={() => setSelected(d)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => e.key === "Enter" && setSelected(d)}
+              >
+                <div className="flex items-start justify-between">
+                  <div>
+                    <h4 className="font-semibold text-gray-900">{d.subject}</h4>
+                    <p className="text-sm text-gray-500 mt-1 line-clamp-2">
+                      {d.description}
+                    </p>
+                    <div className="flex gap-4 mt-3 text-xs text-gray-400">
+                      <span className="flex items-center gap-1">
+                        <User size={12} />
+                        {d.customerName}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Store size={12} />
+                        {d.merchantName}
+                      </span>
+                      <span>Filed: {d.createdAt}</span>
+                    </div>
                   </div>
+                  <StatusBadge status={d.status} />
                 </div>
-                <StatusBadge status={d.status} />
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </Card>
 
       <Modal
