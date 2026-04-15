@@ -24,6 +24,7 @@ import {
   saveMerchantProfile,
   getMerchantProfile,
   getAllMerchantProfiles,
+  deleteMerchantProfile,
 } from "@/lib/merchantDB";
 
 interface AppState {
@@ -100,22 +101,37 @@ async function loadPendingMerchantsFromChain(): Promise<
     requestedAt: number;
   }>
 > {
-  const contract = await getContract();
-  if (!contract) return [];
-
   try {
+    // Use JsonRpcProvider directly to bypass MetaMask caching
+    const provider = new ethers.JsonRpcProvider("http://127.0.0.1:8545");
+    const contract = new ethers.Contract(
+      FOODLEDGER_ADDRESS,
+      FOODLEDGER_ABI,
+      provider,
+    );
     const pendingIds = await contract.getPendingMerchantRegistrations();
+    console.log(
+      "Pending registration IDs from chain:",
+      JSON.stringify(pendingIds.map(Number)),
+    );
     const pendingMerchants = [];
 
     for (const regId of pendingIds) {
-      const reg = await contract.getMerchantRegistration(Number(regId));
-      pendingMerchants.push({
-        id: Number(regId),
-        merchant: reg.merchant.toLowerCase(),
-        name: reg.name,
-        status: Number(reg.status),
-        requestedAt: Number(reg.requestedAt),
-      });
+      try {
+        const reg = await contract.getMerchantRegistration(Number(regId));
+        // Only include registrations that are still pending (status 0)
+        if (Number(reg.status) === 0) {
+          pendingMerchants.push({
+            id: Number(regId),
+            merchant: reg.merchant.toLowerCase(),
+            name: reg.name,
+            status: Number(reg.status),
+            requestedAt: Number(reg.requestedAt),
+          });
+        }
+      } catch (regErr) {
+        console.error("Failed to load registration", Number(regId), regErr);
+      }
     }
 
     return pendingMerchants;
@@ -129,10 +145,14 @@ async function loadPendingMerchantsFromChain(): Promise<
 async function checkMerchantApprovalStatus(
   merchantAddress: string,
 ): Promise<"pending" | "approved" | "rejected" | null> {
-  const contract = await getContract();
-  if (!contract) return null;
-
   try {
+    // Use JsonRpcProvider directly to bypass MetaMask caching
+    const provider = new ethers.JsonRpcProvider("http://127.0.0.1:8545");
+    const contract = new ethers.Contract(
+      FOODLEDGER_ADDRESS,
+      FOODLEDGER_ABI,
+      provider,
+    );
     const pendingIds = await contract.getPendingMerchantRegistrations();
 
     for (const regId of pendingIds) {
@@ -149,7 +169,7 @@ async function checkMerchantApprovalStatus(
 
     // If not in pending list, they might be already approved (in active merchants)
     const user = await contract.getUser(merchantAddress);
-    if (user.role === 2) {
+    if (Number(user.role) === 2) {
       // Role.Merchant = 2
       return "approved";
     }
@@ -359,7 +379,7 @@ export const useStore = create<AppState>((set, get) => ({
 
       // Check on-chain role
       const role = await get().checkOnChainRole(address);
-      set({ onChainRole: role, isLoading: false });
+      set({ onChainRole: role });
 
       // Detect chain reset: wallet has no on-chain role but has a Firebase profile
       // Auto re-register on-chain in the background using Firebase data
@@ -375,32 +395,66 @@ export const useStore = create<AppState>((set, get) => ({
 
             const contract = await getContract(true);
             if (contract) {
-              const tx = await contract.registerAsMerchant(
-                fbProfile.businessName,
-              );
-              await tx.wait();
+              // Check if there's already a pending registration on-chain
+              const existingRegId =
+                await contract.merchantRegistrationId(address);
+              if (Number(existingRegId) === 0) {
+                // No existing registration, safe to register
+                const tx = await contract.registerAsMerchant(
+                  fbProfile.businessName,
+                );
+                await tx.wait();
+              }
 
-              set({
-                onChainRole: Role.Merchant,
-                chainResetDetected: false,
-                currentUser: {
-                  id: address,
-                  walletAddress: address,
-                  role: "merchant",
-                  name: fbProfile.businessName,
-                  businessName: fbProfile.businessName,
-                  description: fbProfile.description || "",
-                  cuisine: fbProfile.cuisine || "",
-                  location: fbProfile.location || "",
-                  logo: fbProfile.logo || "",
-                  email: fbProfile.email || "",
-                  phone: fbProfile.phone || "",
-                  status: "approved",
-                  createdAt: new Date().toISOString(),
-                  isActive: true,
-                } as Merchant,
-                isLoading: false,
-              });
+              // Check if we got auto-approved or still pending
+              const newRole = await get().checkOnChainRole(address);
+              if (newRole === Role.Merchant) {
+                // Already approved (shouldn't happen on fresh chain, but handle it)
+                set({
+                  onChainRole: Role.Merchant,
+                  chainResetDetected: false,
+                  currentUser: {
+                    id: address,
+                    walletAddress: address,
+                    role: "merchant",
+                    name: fbProfile.businessName,
+                    businessName: fbProfile.businessName,
+                    description: fbProfile.description || "",
+                    cuisine: fbProfile.cuisine || "",
+                    location: fbProfile.location || "",
+                    logo: fbProfile.logo || "",
+                    email: fbProfile.email || "",
+                    phone: fbProfile.phone || "",
+                    status: "approved",
+                    createdAt: new Date().toISOString(),
+                    isActive: true,
+                  } as Merchant,
+                  isLoading: false,
+                });
+              } else {
+                // Registration is pending admin approval after chain reset
+                set({
+                  onChainRole: Role.None,
+                  chainResetDetected: true,
+                  currentUser: {
+                    id: address,
+                    walletAddress: address,
+                    role: "merchant",
+                    name: fbProfile.businessName,
+                    businessName: fbProfile.businessName,
+                    description: fbProfile.description || "",
+                    cuisine: fbProfile.cuisine || "",
+                    location: fbProfile.location || "",
+                    logo: fbProfile.logo || "",
+                    email: fbProfile.email || "",
+                    phone: fbProfile.phone || "",
+                    status: "pending",
+                    createdAt: new Date().toISOString(),
+                    isActive: true,
+                  } as Merchant,
+                  isLoading: false,
+                });
+              }
 
               // Load on-chain data
               await get().loadOnChainData();
@@ -483,6 +537,7 @@ export const useStore = create<AppState>((set, get) => ({
         await get().loadOnChainData();
       }
 
+      set({ isLoading: false });
       return address;
     } catch {
       console.error("Wallet connection failed");
@@ -493,12 +548,8 @@ export const useStore = create<AppState>((set, get) => ({
 
   checkOnChainRole: async (address: string) => {
     try {
-      // Create a fresh provider each time to avoid stale connections
-      const provider = getProvider();
-      if (!provider) {
-        console.error("checkOnChainRole: No provider");
-        return Role.None;
-      }
+      // Use direct RPC to bypass MetaMask caching
+      const provider = new ethers.JsonRpcProvider("http://127.0.0.1:8545");
       const contract = new ethers.Contract(
         FOODLEDGER_ADDRESS,
         FOODLEDGER_ABI,
@@ -532,7 +583,7 @@ export const useStore = create<AppState>((set, get) => ({
       const address = get().walletAddress!;
       if (role === "merchant") {
         set({
-          onChainRole: Role.Merchant,
+          onChainRole: Role.None,
           currentUser: {
             id: address,
             walletAddress: address,
@@ -545,12 +596,22 @@ export const useStore = create<AppState>((set, get) => ({
             logo: "",
             email: "",
             phone: "",
-            status: "approved",
+            status: "pending",
             createdAt: new Date().toISOString(),
             isActive: true,
           } as Merchant,
           chainResetDetected: false,
           isLoading: false,
+        });
+        // Save merchant profile to Firebase
+        await saveMerchantProfile(address, {
+          businessName: name,
+          description: "",
+          cuisine: "",
+          location: "",
+          logo: "",
+          email: "",
+          phone: "",
         });
         // Load pending merchants to show the new request
         await get().loadPendingMerchants();
@@ -577,6 +638,12 @@ export const useStore = create<AppState>((set, get) => ({
       return true;
     } catch (err) {
       console.error("Registration failed:", err);
+      // Extract revert reason if available
+      const errorMessage =
+        (err as { reason?: string })?.reason ||
+        (err as { message?: string })?.message ||
+        "Unknown error";
+      console.error("Revert reason:", errorMessage);
       set({ isLoading: false });
       return false;
     }
@@ -698,10 +765,27 @@ export const useStore = create<AppState>((set, get) => ({
 
       const tx = await contract.approveMerchantRegistration(registrationId);
       await tx.wait();
+      console.log("Approved registration ID:", registrationId);
+
+      // Read directly from the same contract instance right after tx
+      const directPending = await contract.getPendingMerchantRegistrations();
+      console.log(
+        "Direct read after approval:",
+        JSON.stringify(directPending.map(Number)),
+      );
+
+      // Also read total registrations to verify
+      const totalRegs = await contract.getTotalMerchantRegistrations();
+      console.log("Total merchant registrations:", Number(totalRegs));
 
       // Reload pending merchants and general data
       await get().loadPendingMerchants();
       await get().loadOnChainData();
+
+      console.log(
+        "Pending after approval:",
+        get().pendingMerchantRegistrations,
+      );
 
       set({ isLoading: false });
       return true;
@@ -722,8 +806,15 @@ export const useStore = create<AppState>((set, get) => ({
         return false;
       }
 
+      // Get the merchant address before rejecting so we can clean up Firebase
+      const reg = await contract.getMerchantRegistration(registrationId);
+      const merchantAddress = reg.merchant.toLowerCase();
+
       const tx = await contract.rejectMerchantRegistration(registrationId);
       await tx.wait();
+
+      // Delete merchant profile from Firebase
+      await deleteMerchantProfile(merchantAddress).catch(console.error);
 
       // Reload pending merchants
       await get().loadPendingMerchants();
@@ -737,46 +828,89 @@ export const useStore = create<AppState>((set, get) => ({
     }
   },
 
-  // Start polling for merchant approval status
+  // Start listening for merchant approval (event-based for instant detection + fallback poll)
   startMerchantApprovalPolling: (merchantAddress: string) => {
-    // Clear any existing polling
+    // Clear any existing listeners/polling
     get().stopMerchantApprovalPolling();
 
-    // Poll every 5 seconds
+    const handleApproved = async () => {
+      const state = get();
+      if (state.currentUser && state.currentUser.role === "merchant") {
+        set({
+          onChainRole: Role.Merchant,
+          currentUser: {
+            ...state.currentUser,
+            status: "approved" as MerchantStatus,
+          } as Merchant,
+        });
+        await get().loadOnChainData();
+      }
+      get().stopMerchantApprovalPolling();
+    };
+
+    // Listen for the approval event directly from the Hardhat node
+    try {
+      const directProvider = new ethers.JsonRpcProvider(
+        "http://127.0.0.1:8545",
+      );
+      const eventContract = new ethers.Contract(
+        FOODLEDGER_ADDRESS,
+        FOODLEDGER_ABI,
+        directProvider,
+      );
+      eventContract.on(
+        "MerchantRegistrationApproved",
+        (_regId: unknown, merchant: string) => {
+          if (merchant.toLowerCase() === merchantAddress.toLowerCase()) {
+            console.log("Approval event received for:", merchant);
+            handleApproved();
+          }
+        },
+      );
+      // Store the contract reference for cleanup
+      (
+        get() as unknown as { _eventContract?: ethers.Contract }
+      )._eventContract = eventContract;
+    } catch (err) {
+      console.error("Failed to set up event listener:", err);
+    }
+
+    // Fallback poll every 5 seconds in case events are missed
     const intervalId = setInterval(async () => {
       const state = get();
       if (!state.currentUser || state.currentUser.role !== "merchant") {
-        // Stop polling if no current merchant user
         get().stopMerchantApprovalPolling();
         return;
       }
-
       const status = await checkMerchantApprovalStatus(merchantAddress);
-
       if (status === "approved") {
-        // Update current user status to approved
-        if (state.currentUser && state.currentUser.role === "merchant") {
-          set({
-            currentUser: {
-              ...state.currentUser,
-              status: "approved" as MerchantStatus,
-            } as Merchant,
-          });
-        }
-        // Stop polling once approved
-        get().stopMerchantApprovalPolling();
+        handleApproved();
       }
-    }, 5000); // Check every 5 seconds
+    }, 5000);
 
     set({ pollingInterval: intervalId });
   },
 
-  // Stop the polling
+  // Stop the polling and event listeners
   stopMerchantApprovalPolling: () => {
     const state = get();
     if (state.pollingInterval) {
       clearInterval(state.pollingInterval);
       set({ pollingInterval: null });
+    }
+    // Clean up event listener
+    try {
+      const eventContract = (
+        state as unknown as { _eventContract?: ethers.Contract }
+      )._eventContract;
+      if (eventContract) {
+        eventContract.removeAllListeners("MerchantRegistrationApproved");
+        (
+          state as unknown as { _eventContract?: ethers.Contract }
+        )._eventContract = undefined;
+      }
+    } catch {
+      // ignore cleanup errors
     }
   },
 
