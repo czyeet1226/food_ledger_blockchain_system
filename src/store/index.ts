@@ -91,11 +91,7 @@ interface AppState {
       "id" | "status" | "createdAt" | "resolution" | "resolvedAt"
     >,
   ) => Promise<void>;
-  updateDisputeStatus: (
-    id: string,
-    status: DisputeStatus,
-    resolution?: string,
-  ) => Promise<void>;
+  updateDisputeStatus: (id: string, status: DisputeStatus) => Promise<void>;
 }
 
 // Helper: load pending merchant registrations from the blockchain
@@ -1080,7 +1076,6 @@ export const useStore = create<AppState>((set, get) => ({
       const contract = await getContract();
       if (!contract) return;
 
-      const totalDisputes = Number(await contract.getTotalDisputes());
       const disputeIds = await contract.getAllDisputes();
       const loadedDisputes: Dispute[] = [];
 
@@ -1088,24 +1083,24 @@ export const useStore = create<AppState>((set, get) => ({
         const d = await contract.getDispute(id);
         // Convert status enum: 0=Open, 1=Investigating, 2=Resolved, 3=Dismissed
         const statusMap = ["open", "investigating", "resolved", "dismissed"];
+
+        // Get customer and merchant names from blockchain
+        const customerUser = await contract.getUser(d.customer);
+        const merchantUser = await contract.getUser(d.merchant);
+
         loadedDisputes.push({
           id: `dispute-${id}`,
           customerId: d.customer.toLowerCase(),
           merchantId: d.merchant.toLowerCase(),
-          customerName: d.customerName,
-          merchantName: d.merchantName,
+          customerName: customerUser.name,
+          merchantName: merchantUser.name,
           customerWalletAddress: d.customer,
           merchantWalletAddress: d.merchant,
           subject: d.subject,
           description: d.description,
-          txHash: `0x${d.transactionId}`,
+          txHash: `0x${id}`,
           status: statusMap[Number(d.status)] as DisputeStatus,
-          resolution: d.resolution,
           createdAt: new Date(Number(d.createdAt) * 1000).toISOString(),
-          resolvedAt:
-            Number(d.resolvedAt) > 0
-              ? new Date(Number(d.resolvedAt) * 1000).toISOString()
-              : undefined,
         });
       }
 
@@ -1124,11 +1119,8 @@ export const useStore = create<AppState>((set, get) => ({
 
       const tx = await contract.createDispute(
         dispute.merchantWalletAddress,
-        dispute.customerName,
-        dispute.merchantName,
         dispute.subject,
         dispute.description,
-        0, // transaction ID (placeholder)
       );
 
       await tx.wait();
@@ -1161,7 +1153,6 @@ export const useStore = create<AppState>((set, get) => ({
       const tx = await contract.updateDisputeStatus(
         disputeIdNum,
         statusMap[status],
-        resolution || "",
       );
 
       await tx.wait();

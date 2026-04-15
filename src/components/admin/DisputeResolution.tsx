@@ -11,7 +11,6 @@ import { User, Store } from "lucide-react";
 export function DisputeResolution() {
   const { disputes, updateDisputeStatus, loadDisputesFromChain } = useStore();
   const [selected, setSelected] = useState<Dispute | null>(null);
-  const [resolution, setResolution] = useState("");
   const [isLoading, setIsLoading] = useState(true);
 
   // Load disputes from blockchain when component mounts
@@ -27,9 +26,8 @@ export function DisputeResolution() {
   const handleResolve = async (status: DisputeStatus) => {
     if (!selected) return;
     try {
-      await updateDisputeStatus(selected.id, status, resolution);
+      await updateDisputeStatus(selected.id, status);
       setSelected(null);
-      setResolution("");
       alert("Dispute status updated successfully!");
     } catch (err) {
       console.error("Error updating dispute:", err);
@@ -146,22 +144,6 @@ export function DisputeResolution() {
               <code className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-md block mt-1 font-mono">
                 {selected.txHash}
               </code>
-            </div>
-            <div>
-              <label
-                htmlFor="resolution"
-                className="text-xs font-medium text-gray-500 uppercase tracking-wider block mb-1.5"
-              >
-                Resolution Notes
-              </label>
-              <textarea
-                id="resolution"
-                value={resolution}
-                onChange={(e) => setResolution(e.target.value)}
-                className="w-full border border-gray-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-400 outline-none transition-all"
-                rows={3}
-                placeholder="Enter resolution details..."
-              />
             </div>
             <div className="flex gap-2 pt-2">
               <button

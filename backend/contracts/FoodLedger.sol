@@ -49,15 +49,10 @@ contract FoodLedger {
         uint256 id;
         address customer;
         address merchant;
-        string customerName;
-        string merchantName;
         string subject;
         string description;
-        uint256 transactionId;
-        DisputeStatus status;
-        string resolution;
+        uint8 status; // 0=Open, 1=Investigating, 2=Resolved, 3=Dismissed
         uint256 createdAt;
-        uint256 resolvedAt;
     }
 
     // ===== State =====
@@ -298,26 +293,18 @@ contract FoodLedger {
     // ===== Disputes =====
     function createDispute(
         address _merchant,
-        string memory _customerName,
-        string memory _merchantName,
         string memory _subject,
-        string memory _description,
-        uint256 _transactionId
+        string memory _description
     ) external onlyCustomer {
         uint256 disputeId = nextDisputeId++;
         disputes[disputeId] = Dispute({
             id: disputeId,
             customer: msg.sender,
             merchant: _merchant,
-            customerName: _customerName,
-            merchantName: _merchantName,
             subject: _subject,
             description: _description,
-            transactionId: _transactionId,
-            status: DisputeStatus.Open,
-            resolution: "",
-            createdAt: block.timestamp,
-            resolvedAt: 0
+            status: 0, // Open
+            createdAt: block.timestamp
         });
         allDisputeIds.push(disputeId);
         emit DisputeCreated(disputeId, msg.sender, _merchant, _subject);
@@ -325,18 +312,12 @@ contract FoodLedger {
 
     function updateDisputeStatus(
         uint256 _disputeId,
-        DisputeStatus _status,
-        string memory _resolution
+        uint8 _status
     ) external onlyAdmin {
         require(disputes[_disputeId].id != 0, "Dispute not found");
+        require(_status <= 3, "Invalid status");
         disputes[_disputeId].status = _status;
-        if (keccak256(abi.encodePacked(_resolution)) != keccak256(abi.encodePacked(""))) {
-            disputes[_disputeId].resolution = _resolution;
-        }
-        if (_status == DisputeStatus.Resolved) {
-            disputes[_disputeId].resolvedAt = block.timestamp;
-        }
-        emit DisputeStatusUpdated(_disputeId, _status);
+        emit DisputeStatusUpdated(_disputeId, DisputeStatus(_status));
     }
 
     // ===== Read functions =====
