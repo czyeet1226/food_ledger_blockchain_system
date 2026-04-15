@@ -1073,10 +1073,16 @@ export const useStore = create<AppState>((set, get) => ({
       ],
     })),
   transactions: [],
-  disputes: mockDisputes,
+  disputes: (() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("disputes");
+      return saved ? JSON.parse(saved) : mockDisputes;
+    }
+    return mockDisputes;
+  })(),
   createDispute: (dispute) =>
-    set((s) => ({
-      disputes: [
+    set((s) => {
+      const newDisputes = [
         ...s.disputes,
         {
           ...dispute,
@@ -1084,11 +1090,20 @@ export const useStore = create<AppState>((set, get) => ({
           status: "open" as DisputeStatus,
           createdAt: new Date().toISOString(),
         },
-      ],
-    })),
+      ];
+      // Persist to localStorage
+      if (typeof window !== "undefined") {
+        localStorage.setItem("disputes", JSON.stringify(newDisputes));
+        console.log(
+          "✅ Dispute created and saved to localStorage:",
+          newDisputes,
+        );
+      }
+      return { disputes: newDisputes };
+    }),
   updateDisputeStatus: (id, status, resolution) =>
-    set((s) => ({
-      disputes: s.disputes.map((d) =>
+    set((s) => {
+      const updated = s.disputes.map((d) =>
         d.id === id
           ? {
               ...d,
@@ -1098,6 +1113,15 @@ export const useStore = create<AppState>((set, get) => ({
                 status === "resolved" ? new Date().toISOString() : d.resolvedAt,
             }
           : d,
-      ),
-    })),
+      );
+      // Persist to localStorage
+      if (typeof window !== "undefined") {
+        localStorage.setItem("disputes", JSON.stringify(updated));
+        console.log(
+          "✅ Dispute status updated and saved to localStorage",
+          updated,
+        );
+      }
+      return { disputes: updated };
+    }),
 }));

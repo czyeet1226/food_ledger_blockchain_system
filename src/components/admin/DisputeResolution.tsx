@@ -13,7 +13,16 @@ export function DisputeResolution() {
   const [selected, setSelected] = useState<Dispute | null>(null);
   const [resolution, setResolution] = useState("");
 
-  console.log("DisputeResolution - Current disputes:", disputes);
+  // Log disputes from store and localStorage for debugging
+  if (typeof window !== "undefined") {
+    console.log("📋 DisputeResolution Component Rendered");
+    console.log("   Disputes from store:", disputes);
+    const storageDisputes = localStorage.getItem("disputes");
+    console.log(
+      "   Disputes in localStorage:",
+      storageDisputes ? JSON.parse(storageDisputes) : "None",
+    );
+  }
 
   const handleResolve = (status: DisputeStatus) => {
     if (!selected) return;
