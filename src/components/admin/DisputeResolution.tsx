@@ -85,6 +85,30 @@ export function DisputeResolution() {
                 {selected.description}
               </p>
             </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Customer
+                </p>
+                <p className="text-sm text-gray-900 mt-1">
+                  {selected.customerName}
+                </p>
+                <code className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-md block mt-1.5 font-mono break-all">
+                  {selected.customerWalletAddress}
+                </code>
+              </div>
+              <div>
+                <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Merchant
+                </p>
+                <p className="text-sm text-gray-900 mt-1">
+                  {selected.merchantName}
+                </p>
+                <code className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-md block mt-1.5 font-mono break-all">
+                  {selected.merchantWalletAddress}
+                </code>
+              </div>
+            </div>
             <div>
               <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Transaction

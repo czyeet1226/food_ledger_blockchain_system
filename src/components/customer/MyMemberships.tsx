@@ -7,16 +7,22 @@ import { QRCodeSVG } from "qrcode.react";
 import { useState } from "react";
 import { Modal } from "@/components/ui/Modal";
 import type { OwnedMembership } from "@/types";
-import { QrCode, Shield, CreditCard } from "lucide-react";
+import { QrCode, Shield, CreditCard, AlertCircle } from "lucide-react";
 
 export function MyMemberships() {
-  const { ownedMemberships, currentUser } = useStore();
+  const { ownedMemberships, currentUser, merchants, createDispute } =
+    useStore();
   const mine = ownedMemberships.filter((m) => m.customerId === currentUser?.id);
   const [qrMembership, setQrMembership] = useState<OwnedMembership | null>(
     null,
   );
   const [proofMembership, setProofMembership] =
     useState<OwnedMembership | null>(null);
+  const [reportMembership, setReportMembership] =
+    useState<OwnedMembership | null>(null);
+  const [reportTitle, setReportTitle] = useState("");
+  const [reportDescription, setReportDescription] = useState("");
+  const [reportSubmitting, setReportSubmitting] = useState(false);
 
   return (
     <>
@@ -77,6 +83,12 @@ export function MyMemberships() {
                     className="flex items-center gap-1.5 bg-gray-100 text-gray-700 px-4 py-2 rounded-xl text-sm font-medium hover:bg-gray-200 transition-colors"
                   >
                     <Shield size={14} /> Proof
+                  </button>
+                  <button
+                    onClick={() => setReportMembership(m)}
+                    className="flex items-center gap-1.5 bg-red-50 text-red-600 px-4 py-2 rounded-xl text-sm font-medium hover:bg-red-100 transition-colors"
+                  >
+                    <AlertCircle size={14} /> Report
                   </button>
                 </div>
               </Card>
@@ -148,6 +160,102 @@ export function MyMemberships() {
               This record is immutable and stored on the blockchain. It serves
               as proof of purchase.
             </p>
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        open={!!reportMembership}
+        onClose={() => {
+          setReportMembership(null);
+          setReportTitle("");
+          setReportDescription("");
+        }}
+        title="Report Issue with Membership"
+      >
+        {reportMembership && (
+          <div className="space-y-4">
+            <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+              <p className="text-sm text-red-800">
+                <strong>Membership:</strong> {reportMembership.planTitle} at{" "}
+                {reportMembership.merchantName}
+              </p>
+            </div>
+            <div>
+              <label className="text-sm font-medium text-gray-700 block mb-1.5">
+                Issue Title <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                value={reportTitle}
+                onChange={(e) => setReportTitle(e.target.value)}
+                placeholder="e.g., QR code not working, discount not applied"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-gray-700 block mb-1.5">
+                Description <span className="text-red-500">*</span>
+              </label>
+              <textarea
+                value={reportDescription}
+                onChange={(e) => setReportDescription(e.target.value)}
+                placeholder="Please describe the issue in detail..."
+                rows={4}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent"
+              />
+            </div>
+            <div className="flex gap-3 pt-4 border-t border-gray-200">
+              <button
+                onClick={() => {
+                  setReportMembership(null);
+                  setReportTitle("");
+                  setReportDescription("");
+                }}
+                className="flex-1 px-4 py-2 text-gray-700 text-sm font-medium border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  if (!reportTitle.trim() || !reportDescription.trim()) {
+                    alert("Please fill in both title and description");
+                    return;
+                  }
+
+                  setReportSubmitting(true);
+
+                  // Get merchant wallet address
+                  const merchant = merchants.find(
+                    (m) => m.id === reportMembership.merchantId,
+                  );
+                  const merchantWallet = merchant?.walletAddress || "0x0";
+
+                  // Create dispute
+                  createDispute({
+                    customerId: reportMembership.customerId,
+                    merchantId: reportMembership.merchantId,
+                    customerName: currentUser?.name || "Unknown",
+                    merchantName: reportMembership.merchantName,
+                    customerWalletAddress: currentUser?.walletAddress || "0x0",
+                    merchantWalletAddress: merchantWallet,
+                    subject: reportTitle,
+                    description: reportDescription,
+                    txHash: reportMembership.txHash,
+                  });
+
+                  setReportSubmitting(false);
+                  setReportMembership(null);
+                  setReportTitle("");
+                  setReportDescription("");
+                  alert("Report submitted successfully!");
+                }}
+                disabled={reportSubmitting}
+                className="flex-1 px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 transition-colors disabled:bg-red-400"
+              >
+                {reportSubmitting ? "Submitting..." : "Submit Report"}
+              </button>
+            </div>
           </div>
         )}
       </Modal>

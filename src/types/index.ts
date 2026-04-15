@@ -107,6 +107,8 @@ export interface Dispute {
   merchantId: string;
   customerName: string;
   merchantName: string;
+  customerWalletAddress: string;
+  merchantWalletAddress: string;
   subject: string;
   description: string;
   txHash: string;

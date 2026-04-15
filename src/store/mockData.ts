@@ -276,6 +276,8 @@ export const mockDisputes: Dispute[] = [
     merchantId: "merchant-1",
     customerName: "Alice Smith",
     merchantName: "John's Kitchen",
+    customerWalletAddress: "0xCUSTOM...1234",
+    merchantWalletAddress: "0xMERCH...5678",
     subject: "Membership not recognized at restaurant",
     description:
       "Visited the restaurant and showed my QR code but staff said it was invalid.",
@@ -289,6 +291,8 @@ export const mockDisputes: Dispute[] = [
     merchantId: "merchant-2",
     customerName: "Bob Johnson",
     merchantName: "Sakura Sushi",
+    customerWalletAddress: "0xCUSTOM...5678",
+    merchantWalletAddress: "0xMERCH...ABCD",
     subject: "Benefits not applied",
     description: "My 15% discount was not applied during my last visit.",
     txHash: "0xdef789...abc012",

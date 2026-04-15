@@ -84,6 +84,12 @@ interface AppState {
   createAnnouncement: (a: Omit<Announcement, "id" | "createdAt">) => void;
   transactions: Transaction[];
   disputes: Dispute[];
+  createDispute: (
+    dispute: Omit<
+      Dispute,
+      "id" | "status" | "createdAt" | "resolution" | "resolvedAt"
+    >,
+  ) => void;
   updateDisputeStatus: (
     id: string,
     status: DisputeStatus,
@@ -1068,6 +1074,18 @@ export const useStore = create<AppState>((set, get) => ({
     })),
   transactions: [],
   disputes: mockDisputes,
+  createDispute: (dispute) =>
+    set((s) => ({
+      disputes: [
+        ...s.disputes,
+        {
+          ...dispute,
+          id: `dispute-${Date.now()}`,
+          status: "open" as DisputeStatus,
+          createdAt: new Date().toISOString(),
+        },
+      ],
+    })),
   updateDisputeStatus: (id, status, resolution) =>
     set((s) => ({
       disputes: s.disputes.map((d) =>
