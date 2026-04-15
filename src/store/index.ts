@@ -82,19 +82,20 @@ interface AppState {
   toggleAd: (id: string) => void;
   announcements: Announcement[];
   createAnnouncement: (a: Omit<Announcement, "id" | "createdAt">) => void;
-  transactions: Transaction[];
-  disputes: Dispute[];
+  transactions: [];
+  disputes: mockDisputes;
+  loadDisputesFromChain: () => Promise<void>;
   createDispute: (
     dispute: Omit<
       Dispute,
       "id" | "status" | "createdAt" | "resolution" | "resolvedAt"
     >,
-  ) => void;
+  ) => Promise<void>;
   updateDisputeStatus: (
     id: string,
     status: DisputeStatus,
     resolution?: string,
-  ) => void;
+  ) => Promise<void>;
 }
 
 // Helper: load pending merchant registrations from the blockchain
@@ -1073,55 +1074,105 @@ export const useStore = create<AppState>((set, get) => ({
       ],
     })),
   transactions: [],
-  disputes: (() => {
-    if (typeof window !== "undefined") {
-      const saved = localStorage.getItem("disputes");
-      return saved ? JSON.parse(saved) : mockDisputes;
+  disputes: mockDisputes,
+  loadDisputesFromChain: async () => {
+    try {
+      const contract = await getContract();
+      if (!contract) return;
+
+      const totalDisputes = Number(await contract.getTotalDisputes());
+      const disputeIds = await contract.getAllDisputes();
+      const loadedDisputes: Dispute[] = [];
+
+      for (const id of disputeIds) {
+        const d = await contract.getDispute(id);
+        // Convert status enum: 0=Open, 1=Investigating, 2=Resolved, 3=Dismissed
+        const statusMap = ["open", "investigating", "resolved", "dismissed"];
+        loadedDisputes.push({
+          id: `dispute-${id}`,
+          customerId: d.customer.toLowerCase(),
+          merchantId: d.merchant.toLowerCase(),
+          customerName: d.customerName,
+          merchantName: d.merchantName,
+          customerWalletAddress: d.customer,
+          merchantWalletAddress: d.merchant,
+          subject: d.subject,
+          description: d.description,
+          txHash: `0x${d.transactionId}`,
+          status: statusMap[Number(d.status)] as DisputeStatus,
+          resolution: d.resolution,
+          createdAt: new Date(Number(d.createdAt) * 1000).toISOString(),
+          resolvedAt:
+            Number(d.resolvedAt) > 0
+              ? new Date(Number(d.resolvedAt) * 1000).toISOString()
+              : undefined,
+        });
+      }
+
+      set({ disputes: loadedDisputes });
+      console.log("✅ Disputes loaded from blockchain:", loadedDisputes);
+    } catch (err) {
+      console.error("Failed to load disputes from blockchain:", err);
     }
-    return mockDisputes;
-  })(),
-  createDispute: (dispute) =>
-    set((s) => {
-      const newDisputes = [
-        ...s.disputes,
-        {
-          ...dispute,
-          id: `dispute-${Date.now()}`,
-          status: "open" as DisputeStatus,
-          createdAt: new Date().toISOString(),
-        },
-      ];
-      // Persist to localStorage
-      if (typeof window !== "undefined") {
-        localStorage.setItem("disputes", JSON.stringify(newDisputes));
-        console.log(
-          "✅ Dispute created and saved to localStorage:",
-          newDisputes,
-        );
+  },
+  createDispute: async (dispute) => {
+    try {
+      const contract = await getContract(true);
+      if (!contract) {
+        throw new Error("Contract not available");
       }
-      return { disputes: newDisputes };
-    }),
-  updateDisputeStatus: (id, status, resolution) =>
-    set((s) => {
-      const updated = s.disputes.map((d) =>
-        d.id === id
-          ? {
-              ...d,
-              status,
-              resolution: resolution || d.resolution,
-              resolvedAt:
-                status === "resolved" ? new Date().toISOString() : d.resolvedAt,
-            }
-          : d,
+
+      const tx = await contract.createDispute(
+        dispute.merchantWalletAddress,
+        dispute.customerName,
+        dispute.merchantName,
+        dispute.subject,
+        dispute.description,
+        0, // transaction ID (placeholder)
       );
-      // Persist to localStorage
-      if (typeof window !== "undefined") {
-        localStorage.setItem("disputes", JSON.stringify(updated));
-        console.log(
-          "✅ Dispute status updated and saved to localStorage",
-          updated,
-        );
+
+      await tx.wait();
+      console.log("✅ Dispute created on blockchain");
+
+      // Reload disputes from chain
+      const loadDisputesFromChain = get().loadDisputesFromChain;
+      await loadDisputesFromChain();
+    } catch (err) {
+      console.error("Failed to create dispute:", err);
+      throw err;
+    }
+  },
+  updateDisputeStatus: async (id, status, resolution) => {
+    try {
+      const contract = await getContract(true);
+      if (!contract) {
+        throw new Error("Contract not available");
       }
-      return { disputes: updated };
-    }),
+
+      // Convert status string to enum: open=0, investigating=1, resolved=2, dismissed=3
+      const statusMap: Record<string, number> = {
+        open: 0,
+        investigating: 1,
+        resolved: 2,
+        dismissed: 3,
+      };
+
+      const disputeIdNum = parseInt(id.replace("dispute-", ""));
+      const tx = await contract.updateDisputeStatus(
+        disputeIdNum,
+        statusMap[status],
+        resolution || "",
+      );
+
+      await tx.wait();
+      console.log("✅ Dispute status updated on blockchain");
+
+      // Reload disputes from chain
+      const loadDisputesFromChain = get().loadDisputesFromChain;
+      await loadDisputesFromChain();
+    } catch (err) {
+      console.error("Failed to update dispute status:", err);
+      throw err;
+    }
+  },
 }));

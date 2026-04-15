@@ -5,6 +5,7 @@ contract FoodLedger {
     // ===== Roles =====
     enum Role { None, Admin, Merchant, Customer }
     enum MerchantStatus { Pending, Approved, Rejected }
+    enum DisputeStatus { Open, Investigating, Resolved, Dismissed }
 
     // ===== Structs =====
     struct UserInfo {
@@ -44,11 +45,27 @@ contract FoodLedger {
         uint256 expiresAt;
     }
 
+    struct Dispute {
+        uint256 id;
+        address customer;
+        address merchant;
+        string customerName;
+        string merchantName;
+        string subject;
+        string description;
+        uint256 transactionId;
+        DisputeStatus status;
+        string resolution;
+        uint256 createdAt;
+        uint256 resolvedAt;
+    }
+
     // ===== State =====
     address public owner;
     uint256 public nextPlanId;
     uint256 public nextPurchaseId;
     uint256 public nextMerchantRegistrationId;
+    uint256 public nextDisputeId;
 
     mapping(address => UserInfo) public users;
     mapping(uint256 => MembershipPlan) public plans;
@@ -68,6 +85,10 @@ contract FoodLedger {
     address[] public allCustomers;
     uint256[] public pendingMerchantRegistrations;
 
+    // Disputes
+    mapping(uint256 => Dispute) public disputes;
+    uint256[] public allDisputeIds;
+
     // ===== Events =====
     event UserRegistered(address indexed user, Role role, string name);
     event MerchantRegistrationRequested(uint256 indexed registrationId, address indexed merchant, string name);
@@ -76,6 +97,8 @@ contract FoodLedger {
     event PlanCreated(uint256 indexed planId, address indexed merchant, string title, uint256 priceInWei);
     event MembershipPurchased(uint256 indexed purchaseId, uint256 indexed planId, address indexed buyer, address merchant, uint256 amountPaid);
     event PlanToggled(uint256 indexed planId, bool isActive);
+    event DisputeCreated(uint256 indexed disputeId, address indexed customer, address indexed merchant, string subject);
+    event DisputeStatusUpdated(uint256 indexed disputeId, DisputeStatus status);
 
     // ===== Modifiers =====
     modifier onlyAdmin() {
@@ -98,6 +121,7 @@ contract FoodLedger {
         owner = msg.sender;
         // Start registration IDs at 1 so 0 means "no registration"
         nextMerchantRegistrationId = 1;
+        nextDisputeId = 1;
         // Deployer is automatically the admin
         users[msg.sender] = UserInfo({
             role: Role.Admin,
@@ -271,6 +295,50 @@ contract FoodLedger {
         emit PlanToggled(_planId, plans[_planId].isActive);
     }
 
+    // ===== Disputes =====
+    function createDispute(
+        address _merchant,
+        string memory _customerName,
+        string memory _merchantName,
+        string memory _subject,
+        string memory _description,
+        uint256 _transactionId
+    ) external onlyCustomer {
+        uint256 disputeId = nextDisputeId++;
+        disputes[disputeId] = Dispute({
+            id: disputeId,
+            customer: msg.sender,
+            merchant: _merchant,
+            customerName: _customerName,
+            merchantName: _merchantName,
+            subject: _subject,
+            description: _description,
+            transactionId: _transactionId,
+            status: DisputeStatus.Open,
+            resolution: "",
+            createdAt: block.timestamp,
+            resolvedAt: 0
+        });
+        allDisputeIds.push(disputeId);
+        emit DisputeCreated(disputeId, msg.sender, _merchant, _subject);
+    }
+
+    function updateDisputeStatus(
+        uint256 _disputeId,
+        DisputeStatus _status,
+        string memory _resolution
+    ) external onlyAdmin {
+        require(disputes[_disputeId].id != 0, "Dispute not found");
+        disputes[_disputeId].status = _status;
+        if (keccak256(abi.encodePacked(_resolution)) != keccak256(abi.encodePacked(""))) {
+            disputes[_disputeId].resolution = _resolution;
+        }
+        if (_status == DisputeStatus.Resolved) {
+            disputes[_disputeId].resolvedAt = block.timestamp;
+        }
+        emit DisputeStatusUpdated(_disputeId, _status);
+    }
+
     // ===== Read functions =====
     function getUser(address _addr) external view returns (UserInfo memory) {
         return users[_addr];
@@ -336,5 +404,17 @@ contract FoodLedger {
 
     function getTotalMerchantRegistrations() external view returns (uint256) {
         return nextMerchantRegistrationId;
+    }
+
+    function getDispute(uint256 _disputeId) external view returns (Dispute memory) {
+        return disputes[_disputeId];
+    }
+
+    function getAllDisputes() external view returns (uint256[] memory) {
+        return allDisputeIds;
+    }
+
+    function getTotalDisputes() external view returns (uint256) {
+        return allDisputeIds.length;
     }
 }

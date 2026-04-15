@@ -244,14 +244,19 @@ export function MyMemberships() {
                     txHash: reportMembership.txHash,
                   };
 
-                  console.log("Creating dispute:", disputeData);
-                  createDispute(disputeData);
-
-                  setReportSubmitting(false);
-                  setReportMembership(null);
-                  setReportTitle("");
-                  setReportDescription("");
-                  alert("Report submitted successfully!");
+                  try {
+                    console.log("Creating dispute on blockchain:", disputeData);
+                    await createDispute(disputeData);
+                    setReportMembership(null);
+                    setReportTitle("");
+                    setReportDescription("");
+                    alert("Report submitted successfully!");
+                  } catch (err) {
+                    console.error("Error creating dispute:", err);
+                    alert("Failed to submit report. Please try again.");
+                  } finally {
+                    setReportSubmitting(false);
+                  }
                 }}
                 disabled={reportSubmitting}
                 className="flex-1 px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 transition-colors disabled:bg-red-400"

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useStore } from "@/store";
 import { Card } from "@/components/ui/Card";
 import { StatusBadge } from "@/components/ui/Badge";
@@ -9,26 +9,32 @@ import type { Dispute, DisputeStatus } from "@/types";
 import { User, Store } from "lucide-react";
 
 export function DisputeResolution() {
-  const { disputes, updateDisputeStatus } = useStore();
+  const { disputes, updateDisputeStatus, loadDisputesFromChain } = useStore();
   const [selected, setSelected] = useState<Dispute | null>(null);
   const [resolution, setResolution] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Log disputes from store and localStorage for debugging
-  if (typeof window !== "undefined") {
-    console.log("📋 DisputeResolution Component Rendered");
-    console.log("   Disputes from store:", disputes);
-    const storageDisputes = localStorage.getItem("disputes");
-    console.log(
-      "   Disputes in localStorage:",
-      storageDisputes ? JSON.parse(storageDisputes) : "None",
-    );
-  }
+  // Load disputes from blockchain when component mounts
+  useEffect(() => {
+    const loadDisputes = async () => {
+      setIsLoading(true);
+      await loadDisputesFromChain();
+      setIsLoading(false);
+    };
+    loadDisputes();
+  }, [loadDisputesFromChain]);
 
-  const handleResolve = (status: DisputeStatus) => {
+  const handleResolve = async (status: DisputeStatus) => {
     if (!selected) return;
-    updateDisputeStatus(selected.id, status, resolution);
-    setSelected(null);
-    setResolution("");
+    try {
+      await updateDisputeStatus(selected.id, status, resolution);
+      setSelected(null);
+      setResolution("");
+      alert("Dispute status updated successfully!");
+    } catch (err) {
+      console.error("Error updating dispute:", err);
+      alert("Failed to update dispute status");
+    }
   };
 
   return (
@@ -40,7 +46,11 @@ export function DisputeResolution() {
             ({disputes.length})
           </span>
         </h3>
-        {disputes.length === 0 ? (
+        {isLoading ? (
+          <div className="text-center py-8">
+            <p className="text-gray-500">Loading disputes from blockchain...</p>
+          </div>
+        ) : disputes.length === 0 ? (
           <div className="text-center py-8">
             <p className="text-gray-500">No disputes yet</p>
             <p className="text-sm text-gray-400 mt-1">
@@ -49,7 +59,7 @@ export function DisputeResolution() {
           </div>
         ) : (
           <div className="space-y-3">
-            {disputes.map((d) => (
+            {disputes.map((d: Dispute) => (
               <div
                 key={d.id}
                 className="border border-gray-100 rounded-xl p-5 cursor-pointer hover:border-brand-200 hover:bg-brand-50/30 transition-all"
