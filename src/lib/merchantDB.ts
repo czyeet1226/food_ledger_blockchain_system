@@ -3,6 +3,7 @@ import {
   setDoc,
   getDoc,
   getDocs,
+  deleteDoc,
   collection,
   updateDoc,
 } from "firebase/firestore";
@@ -57,4 +58,12 @@ export async function updateMerchantField(
     ...fields,
     updatedAt: new Date().toISOString(),
   });
+}
+
+// Delete merchant profile (used when registration is rejected)
+export async function deleteMerchantProfile(
+  walletAddress: string,
+): Promise<void> {
+  const key = walletAddress.toLowerCase();
+  await deleteDoc(doc(db, "merchants", key));
 }

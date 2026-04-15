@@ -28,6 +28,7 @@ export const FOODLEDGER_ABI = [
   "function getPendingMerchantRegistrations() view returns (uint256[])",
   "function getPendingMerchantRegistrationsCount() view returns (uint256)",
   "function getTotalMerchantRegistrations() view returns (uint256)",
+  "function merchantRegistrationId(address) view returns (uint256)",
   "function createPlan(string _title, string _description, uint256 _priceInWei, uint256 _durationDays, uint256 _maxSupply)",
   "function purchaseMembership(uint256 _planId) payable",
   "function togglePlan(uint256 _planId)",

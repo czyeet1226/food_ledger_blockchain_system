@@ -3,7 +3,7 @@
 import { useStore } from "@/store";
 import { Card } from "@/components/ui/Card";
 import { StatusBadge } from "@/components/ui/Badge";
-import { Check, X, Clock } from "lucide-react";
+import { Check, X, Clock, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
 
 export function MerchantApproval() {
@@ -16,9 +16,21 @@ export function MerchantApproval() {
   } = useStore();
   const [approving, setApproving] = useState<number | null>(null);
   const [rejecting, setRejecting] = useState<number | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await loadPendingMerchants();
+    setRefreshing(false);
+  };
 
   useEffect(() => {
     loadPendingMerchants();
+    // Poll every 10 seconds for new registrations
+    const interval = setInterval(() => {
+      loadPendingMerchants();
+    }, 10000);
+    return () => clearInterval(interval);
   }, [loadPendingMerchants]);
 
   const handleApprove = async (registrationId: number, merchant: string) => {
@@ -46,11 +58,21 @@ export function MerchantApproval() {
   return (
     <div className="space-y-6">
       <Card>
-        <h3 className="font-semibold text-gray-900 mb-4">
-          Pending Applications
-          <span className="ml-2 text-sm font-normal text-gray-400">
-            ({pendingMerchantRegistrations.length})
+        <h3 className="font-semibold text-gray-900 mb-4 flex items-center justify-between">
+          <span>
+            Pending Applications
+            <span className="ml-2 text-sm font-normal text-gray-400">
+              ({pendingMerchantRegistrations.length})
+            </span>
           </span>
+          <button
+            onClick={handleRefresh}
+            disabled={refreshing}
+            className="text-gray-400 hover:text-gray-600 transition-colors"
+            title="Refresh"
+          >
+            <RefreshCw size={16} className={refreshing ? "animate-spin" : ""} />
+          </button>
         </h3>
         {pendingMerchantRegistrations.length === 0 ? (
           <div className="text-center py-8">

@@ -96,6 +96,8 @@ contract FoodLedger {
     // ===== Constructor =====
     constructor() {
         owner = msg.sender;
+        // Start registration IDs at 1 so 0 means "no registration"
+        nextMerchantRegistrationId = 1;
         // Deployer is automatically the admin
         users[msg.sender] = UserInfo({
             role: Role.Admin,
@@ -159,6 +161,9 @@ contract FoodLedger {
         
         reg.status = MerchantStatus.Rejected;
         reg.reviewedAt = block.timestamp;
+        
+        // Clear registration ID so merchant can re-register
+        merchantRegistrationId[reg.merchant] = 0;
         
         // Remove from pending list
         _removePendingRegistration(_regId);

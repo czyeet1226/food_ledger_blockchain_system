@@ -121,11 +121,14 @@ export default function Home() {
     return <RegisterScreen />;
   }
 
-  // Step 3: Loading
+  // Step 3: Loading (wallet connected, has role, waiting for user data)
   if (isLoading || !currentUser) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <Loader2 size={32} className="animate-spin text-brand-500" />
+        <div className="text-center">
+          <Loader2 size={32} className="animate-spin text-brand-500 mx-auto" />
+          <p className="text-sm text-gray-400 mt-3">Loading your account...</p>
+        </div>
       </div>
     );
   }
