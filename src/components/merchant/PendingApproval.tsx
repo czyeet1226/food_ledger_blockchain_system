@@ -5,7 +5,7 @@ import { Clock, CheckCircle2, AlertCircle } from "lucide-react";
 
 export function PendingApprovalScreen() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 flex items-center justify-center px-4">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 flex items-start justify-center px-4 py-12">
       <div className="max-w-md w-full">
         <Card className="shadow-2xl">
           <div className="text-center py-12 px-8">
