@@ -43,6 +43,11 @@ export const FOODLEDGER_ABI = [
   "function getTotalPurchases() view returns (uint256)",
   "function isMembershipValid(uint256 _purchaseId) view returns (bool)",
   "function owner() view returns (address)",
+  "function createDispute(address _merchant, string _subject, string _description)",
+  "function updateDisputeStatus(uint256 _disputeId, uint8 _status)",
+  "function getDispute(uint256 _disputeId) view returns (tuple(uint256 id, address customer, address merchant, string subject, string description, uint8 status, uint256 createdAt))",
+  "function getAllDisputes() view returns (uint256[])",
+  "function getTotalDisputes() view returns (uint256)",
   "event PlanCreated(uint256 indexed planId, address indexed merchant, string title, uint256 priceInWei)",
   "event MembershipPurchased(uint256 indexed purchaseId, uint256 indexed planId, address indexed buyer, address merchant, uint256 amountPaid)",
   "event UserRegistered(address indexed user, uint8 role, string name)",
@@ -50,4 +55,6 @@ export const FOODLEDGER_ABI = [
   "event MerchantRegistrationRequested(uint256 indexed registrationId, address indexed merchant, string name)",
   "event MerchantRegistrationApproved(uint256 indexed registrationId, address indexed merchant)",
   "event MerchantRegistrationRejected(uint256 indexed registrationId, address indexed merchant)",
+  "event DisputeCreated(uint256 indexed disputeId, address indexed customer, address indexed merchant, string subject)",
+  "event DisputeStatusUpdated(uint256 indexed disputeId, uint8 status)",
 ] as const;
