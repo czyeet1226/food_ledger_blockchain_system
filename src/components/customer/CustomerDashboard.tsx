@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect } from "react";
+import { useStore } from "@/store";
 import { Tabs } from "@/components/ui/Tabs";
 import { BrowseDeals } from "./BrowseDeals";
 import { MyMemberships } from "./MyMemberships";
@@ -8,6 +10,12 @@ import { CustomerReports } from "./CustomerReports";
 import { ShoppingBag, CreditCard, Receipt, AlertTriangle } from "lucide-react";
 
 export function CustomerDashboard() {
+  const { loadDisputesFromChain } = useStore();
+
+  useEffect(() => {
+    loadDisputesFromChain();
+  }, [loadDisputesFromChain]);
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="mb-6">
