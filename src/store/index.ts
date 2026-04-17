@@ -82,8 +82,8 @@ interface AppState {
   toggleAd: (id: string) => void;
   announcements: Announcement[];
   createAnnouncement: (a: Omit<Announcement, "id" | "createdAt">) => void;
-  transactions: [];
-  disputes: mockDisputes;
+  transactions: Transaction[];
+  disputes: Dispute[];
   loadDisputesFromChain: () => Promise<void>;
   createDispute: (
     dispute: Omit<
@@ -91,7 +91,11 @@ interface AppState {
       "id" | "status" | "createdAt" | "resolution" | "resolvedAt"
     >,
   ) => Promise<void>;
-  updateDisputeStatus: (id: string, status: DisputeStatus) => Promise<void>;
+  updateDisputeStatus: (
+    id: string,
+    status: DisputeStatus,
+    resolution?: string,
+  ) => Promise<void>;
 }
 
 // Helper: load pending merchant registrations from the blockchain
