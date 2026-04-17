@@ -4,7 +4,8 @@ import { Tabs } from "@/components/ui/Tabs";
 import { BrowseDeals } from "./BrowseDeals";
 import { MyMemberships } from "./MyMemberships";
 import { PaymentHistory } from "./PaymentHistory";
-import { ShoppingBag, CreditCard, Receipt } from "lucide-react";
+import { CustomerReports } from "./CustomerReports";
+import { ShoppingBag, CreditCard, Receipt, AlertTriangle } from "lucide-react";
 
 export function CustomerDashboard() {
   return (
@@ -30,10 +31,16 @@ export function CustomerDashboard() {
             content: <MyMemberships />,
           },
           {
-            id: "history",
+            id: "payments",
             label: "Payments",
             icon: <Receipt size={16} />,
             content: <PaymentHistory />,
+          },
+          {
+            id: "reports",
+            label: "Reports",
+            icon: <AlertTriangle size={16} />,
+            content: <CustomerReports />,
           },
         ]}
       />
