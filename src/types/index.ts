@@ -67,9 +67,9 @@ export interface OwnedMembership {
 export interface Ad {
   id: string;
   merchantId: string;
+  merchantName: string;
   title: string;
   description: string;
-  imageUrl: string;
   planId: string;
   isActive: boolean;
   createdAt: string;

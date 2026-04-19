@@ -55,12 +55,23 @@ contract FoodLedger {
         uint256 createdAt;
     }
 
+    struct Ad {
+        uint256 id;
+        address merchant;
+        string title;
+        string description;
+        uint256 planId;
+        bool isActive;
+        uint256 createdAt;
+    }
+
     // ===== State =====
     address public owner;
     uint256 public nextPlanId;
     uint256 public nextPurchaseId;
     uint256 public nextMerchantRegistrationId;
     uint256 public nextDisputeId;
+    uint256 public nextAdId;
 
     mapping(address => UserInfo) public users;
     mapping(uint256 => MembershipPlan) public plans;
@@ -84,6 +95,10 @@ contract FoodLedger {
     mapping(uint256 => Dispute) public disputes;
     uint256[] public allDisputeIds;
 
+    // Ads
+    mapping(uint256 => Ad) public ads;
+    mapping(address => uint256[]) public merchantAds;
+
     // ===== Events =====
     event UserRegistered(address indexed user, Role role, string name);
     event MerchantRegistrationRequested(uint256 indexed registrationId, address indexed merchant, string name);
@@ -94,6 +109,8 @@ contract FoodLedger {
     event PlanToggled(uint256 indexed planId, bool isActive);
     event DisputeCreated(uint256 indexed disputeId, address indexed customer, address indexed merchant, string subject);
     event DisputeStatusUpdated(uint256 indexed disputeId, DisputeStatus status);
+    event AdCreated(uint256 indexed adId, address indexed merchant, string title);
+    event AdToggled(uint256 indexed adId, bool isActive);
 
     // ===== Modifiers =====
     modifier onlyAdmin() {
@@ -320,6 +337,32 @@ contract FoodLedger {
         emit DisputeStatusUpdated(_disputeId, DisputeStatus(_status));
     }
 
+    // ===== Ads =====
+    function createAd(
+        string memory _title,
+        string memory _description,
+        uint256 _planId
+    ) external onlyMerchant {
+        uint256 adId = nextAdId++;
+        ads[adId] = Ad({
+            id: adId,
+            merchant: msg.sender,
+            title: _title,
+            description: _description,
+            planId: _planId,
+            isActive: true,
+            createdAt: block.timestamp
+        });
+        merchantAds[msg.sender].push(adId);
+        emit AdCreated(adId, msg.sender, _title);
+    }
+
+    function toggleAd(uint256 _adId) external onlyMerchant {
+        require(ads[_adId].merchant == msg.sender, "Not your ad");
+        ads[_adId].isActive = !ads[_adId].isActive;
+        emit AdToggled(_adId, ads[_adId].isActive);
+    }
+
     // ===== Read functions =====
     function getUser(address _addr) external view returns (UserInfo memory) {
         return users[_addr];
@@ -368,6 +411,19 @@ contract FoodLedger {
     function isMembershipValid(uint256 _purchaseId) external view returns (bool) {
         Purchase memory p = purchases[_purchaseId];
         return p.buyer != address(0) && block.timestamp <= p.expiresAt;
+    }
+
+    // ===== Ad Getters =====
+    function getAd(uint256 _adId) external view returns (Ad memory) {
+        return ads[_adId];
+    }
+
+    function getTotalAds() external view returns (uint256) {
+        return nextAdId;
+    }
+
+    function getMerchantAds(address _merchant) external view returns (uint256[] memory) {
+        return merchantAds[_merchant];
     }
 
     // ===== Merchant Registration Approval Getters =====

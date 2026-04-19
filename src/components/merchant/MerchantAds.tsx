@@ -13,19 +13,31 @@ export function MerchantAds() {
   const myPlans = plans.filter((p) => p.merchantId === currentUser?.id);
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState({ title: "", description: "", planId: "" });
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleCreate = () => {
+  const handleCreate = async () => {
     if (!currentUser) return;
-    createAd({
-      merchantId: currentUser.id,
-      title: form.title,
-      description: form.description,
-      imageUrl: "",
-      planId: form.planId,
-      isActive: true,
-    });
-    setShowCreate(false);
-    setForm({ title: "", description: "", planId: "" });
+    setIsSubmitting(true);
+    try {
+      await createAd({
+        merchantId: currentUser.id,
+        merchantName: currentUser.name,
+        title: form.title,
+        description: form.description,
+        planId: form.planId,
+        isActive: true,
+      });
+      setShowCreate(false);
+      setForm({ title: "", description: "", planId: "" });
+    } catch (err) {
+      const message =
+        (err as { reason?: string })?.reason ||
+        (err as { message?: string })?.message ||
+        "Unknown error";
+      alert(`Failed to create ad: ${message}`);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const inputClass =
@@ -102,9 +114,10 @@ export function MerchantAds() {
           </select>
           <button
             onClick={handleCreate}
-            className="w-full bg-brand-500 text-white py-2.5 rounded-xl text-sm font-medium hover:bg-brand-600 transition-colors shadow-sm"
+            disabled={isSubmitting}
+            className="w-full bg-brand-500 text-white py-2.5 rounded-xl text-sm font-medium hover:bg-brand-600 transition-colors shadow-sm disabled:opacity-60"
           >
-            Create Ad
+            {isSubmitting ? "Submitting…" : "Create Ad"}
           </button>
         </div>
       </Modal>

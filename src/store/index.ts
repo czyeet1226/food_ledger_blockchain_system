@@ -19,7 +19,7 @@ import type {
   MerchantStatus,
   DisputeStatus,
 } from "@/types";
-import { mockDisputes, mockAds, mockAnnouncements } from "./mockData";
+import { mockDisputes, mockAnnouncements } from "./mockData";
 import {
   saveMerchantProfile,
   getMerchantProfile,
@@ -78,8 +78,8 @@ interface AppState {
   ownedMemberships: OwnedMembership[];
   purchaseMembership: (planId: string) => Promise<void>;
   ads: Ad[];
-  createAd: (ad: Omit<Ad, "id" | "createdAt">) => void;
-  toggleAd: (id: string) => void;
+  createAd: (ad: Omit<Ad, "id" | "createdAt">) => Promise<void>;
+  toggleAd: (id: string) => Promise<void>;
   announcements: Announcement[];
   createAnnouncement: (a: Omit<Announcement, "id" | "createdAt">) => void;
   transactions: Transaction[];
@@ -256,6 +256,29 @@ async function loadAllPurchasesFromChain(): Promise<{
     });
   }
   return { memberships, transactions };
+}
+
+// Helper: load all ads from the blockchain
+async function loadAllAdsFromChain(): Promise<Ad[]> {
+  const contract = await getContract();
+  if (!contract) return [];
+  const totalAds = Number(await contract.getTotalAds());
+  const ads: Ad[] = [];
+  for (let i = 0; i < totalAds; i++) {
+    const a = await contract.getAd(i);
+    const merchantUser = await contract.getUser(a.merchant);
+    ads.push({
+      id: `ad-${i}`,
+      merchantId: a.merchant.toLowerCase(),
+      merchantName: merchantUser.name || a.merchant.slice(0, 10),
+      title: a.title,
+      description: a.description,
+      planId: `plan-${Number(a.planId)}`,
+      isActive: a.isActive,
+      createdAt: new Date(Number(a.createdAt) * 1000).toISOString(),
+    });
+  }
+  return ads;
 }
 
 // Helper: get ethers provider and signer
@@ -680,12 +703,14 @@ export const useStore = create<AppState>((set, get) => ({
         merchantAddrs,
         customerAddrs,
         pendingMerchants,
+        ads,
       ] = await Promise.all([
         loadAllPlansFromChain(),
         loadAllPurchasesFromChain(),
         contract.getAllMerchants(),
         contract.getAllCustomers(),
         loadPendingMerchantsFromChain(),
+        loadAllAdsFromChain(),
       ]);
 
       // Build merchant list from on-chain data, merged with Firebase profiles
@@ -744,6 +769,7 @@ export const useStore = create<AppState>((set, get) => ({
         merchants,
         customers,
         pendingMerchantRegistrations: pendingMerchants,
+        ads,
       });
     } catch (err) {
       console.error("Failed to load on-chain data:", err);
@@ -1051,20 +1077,41 @@ export const useStore = create<AppState>((set, get) => ({
       set({ isLoading: false });
     }
   },
-  ads: mockAds,
-  createAd: (ad) =>
-    set((s) => ({
-      ads: [
-        ...s.ads,
-        { ...ad, id: `ad-${Date.now()}`, createdAt: new Date().toISOString() },
-      ],
-    })),
-  toggleAd: (id) =>
-    set((s) => ({
-      ads: s.ads.map((a) =>
-        a.id === id ? { ...a, isActive: !a.isActive } : a,
-      ),
-    })),
+  ads: [],
+  createAd: async (ad) => {
+    try {
+      set({ isLoading: true });
+      const contract = await getContract(true);
+      if (!contract) {
+        set({ isLoading: false });
+        return;
+      }
+      const planIndex = parseInt(ad.planId.replace("plan-", ""));
+      const tx = await contract.createAd(ad.title, ad.description, planIndex);
+      await tx.wait();
+      // Reload ads from chain
+      const ads = await loadAllAdsFromChain();
+      set({ ads, isLoading: false });
+    } catch (err) {
+      console.error("Create ad failed:", err);
+      set({ isLoading: false });
+      throw err;
+    }
+  },
+  toggleAd: async (id) => {
+    try {
+      const adIndex = parseInt(id.replace("ad-", ""));
+      const contract = await getContract(true);
+      if (!contract) return;
+      const tx = await contract.toggleAd(adIndex);
+      await tx.wait();
+      const ads = await loadAllAdsFromChain();
+      set({ ads });
+    } catch (err) {
+      console.error("Toggle ad failed:", err);
+      throw err;
+    }
+  },
   announcements: mockAnnouncements,
   createAnnouncement: (a) =>
     set((s) => ({

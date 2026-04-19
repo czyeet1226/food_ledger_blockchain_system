@@ -57,4 +57,11 @@ export const FOODLEDGER_ABI = [
   "event MerchantRegistrationRejected(uint256 indexed registrationId, address indexed merchant)",
   "event DisputeCreated(uint256 indexed disputeId, address indexed customer, address indexed merchant, string subject)",
   "event DisputeStatusUpdated(uint256 indexed disputeId, uint8 status)",
+  "function createAd(string _title, string _description, uint256 _planId)",
+  "function toggleAd(uint256 _adId)",
+  "function getAd(uint256 _adId) view returns (tuple(uint256 id, address merchant, string title, string description, uint256 planId, bool isActive, uint256 createdAt))",
+  "function getTotalAds() view returns (uint256)",
+  "function getMerchantAds(address _merchant) view returns (uint256[])",
+  "event AdCreated(uint256 indexed adId, address indexed merchant, string title)",
+  "event AdToggled(uint256 indexed adId, bool isActive)",
 ] as const;

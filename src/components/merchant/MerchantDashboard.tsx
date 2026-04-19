@@ -5,14 +5,12 @@ import { MerchantAnalyticsView } from "./MerchantAnalytics";
 import { ProfileManagement } from "./ProfileManagement";
 import { MembershipPlans } from "./MembershipPlans";
 import { MerchantAds } from "./MerchantAds";
-import { MerchantAnnouncements } from "./MerchantAnnouncements";
 import { QRVerification } from "./QRVerification";
 import {
   BarChart3,
   UserCircle,
   CreditCard,
   Megaphone,
-  Bell,
   QrCode,
 } from "lucide-react";
 
@@ -50,12 +48,6 @@ export function MerchantDashboard() {
             label: "Ads",
             icon: <Megaphone size={16} />,
             content: <MerchantAds />,
-          },
-          {
-            id: "announcements",
-            label: "Announcements",
-            icon: <Bell size={16} />,
-            content: <MerchantAnnouncements />,
           },
           {
             id: "qr",

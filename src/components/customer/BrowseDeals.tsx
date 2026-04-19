@@ -25,15 +25,30 @@ export function BrowseDeals() {
           <div className="grid md:grid-cols-2 gap-4">
             {ads
               .filter((a) => a.isActive)
-              .map((ad) => (
-                <div
-                  key={ad.id}
-                  className="bg-gradient-to-br from-brand-500 to-brand-600 text-white rounded-2xl p-6 shadow-lg shadow-brand-500/20"
-                >
-                  <h4 className="font-semibold text-lg">{ad.title}</h4>
-                  <p className="text-sm opacity-90 mt-1.5">{ad.description}</p>
-                </div>
-              ))}
+              .map((ad) => {
+                const linkedPlan = plans.find((p) => p.id === ad.planId);
+                return (
+                  <div
+                    key={ad.id}
+                    className="bg-gradient-to-br from-brand-500 to-brand-600 text-white rounded-2xl p-6 shadow-lg shadow-brand-500/20"
+                  >
+                    <h4 className="font-semibold text-lg">{ad.title}</h4>
+                    <p className="text-sm opacity-90 mt-1.5">
+                      {ad.description}
+                    </p>
+                    {linkedPlan && (
+                      <div className="mt-3 pt-3 border-t border-white/20 flex items-center justify-between">
+                        <span className="text-xs opacity-80">
+                          Plan: {linkedPlan.title}
+                        </span>
+                        <span className="text-sm font-semibold">
+                          {linkedPlan.price} ETH
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
           </div>
         </div>
       )}
